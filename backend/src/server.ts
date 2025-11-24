@@ -8,6 +8,7 @@ import { globalRateLimiter } from './middleware/rateLimiter';
 // Routes
 import authRoutes from './routes/authRoutes';
 import aiRoutes from './routes/aiRoutes';
+import pemsRoutes from './routes/pemsRoutes';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.get('/health', (req: Request, res: Response) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/pems', pemsRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

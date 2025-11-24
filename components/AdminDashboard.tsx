@@ -4,6 +4,7 @@ import { User, Organization, ApiConfig, SystemConfig, DataExchangeConfig, Asset,
 import { OrgManager } from './admin/OrgManager';
 import { UserManager } from './admin/UserManager';
 import { ApiManager } from './admin/ApiManager';
+import { PemsSync } from './admin/PemsSync';
 import { SystemManager } from './admin/SystemManager';
 import { DataImporter } from './admin/DataImporter';
 import { FieldConfigManager } from './admin/FieldConfigManager';
@@ -288,7 +289,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="max-w-[95%] mx-auto">
                     {activeView === 'orgs' && <OrgManager orgs={orgs} setOrgs={setOrgs} availableAiApis={aiApis} onGenerateAiLogo={onGenerateAiIcon ? (ctx) => onGenerateAiIcon(ctx, 'Org') : undefined} />}
                     {activeView === 'users' && <UserManager users={users} setUsers={setUsers} orgs={orgs} currentUser={currentUser} onGenerateAiAvatar={onGenerateAiIcon ? (ctx) => onGenerateAiIcon(ctx, 'User') : undefined} />}
-                    {activeView === 'apis' && <ApiManager apis={apis} setApis={setApis} orgs={orgs} />}
+                    {activeView === 'apis' && <PemsSync />}
                     {activeView === 'system' && <SystemManager config={systemConfig} setConfig={setSystemConfig} />}
                     {activeView === 'import' && <DataImporter onImportExcel={onImportExcel} config={exportConfig} assets={assets} />}
                     {activeView === 'export' && <FieldConfigManager config={exportConfig} setConfig={setExportConfig} />}

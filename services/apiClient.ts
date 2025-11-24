@@ -235,6 +235,58 @@ class ApiClient {
   }
 
   // ============================================================================
+  // PEMS API Management
+  // ============================================================================
+
+  async getPemsConfigs(organizationId: string): Promise<{ configs: any[] }> {
+    return this.request<{ configs: any[] }>(`/api/pems/configs?organizationId=${organizationId}`);
+  }
+
+  async testPemsConnection(organizationId: string): Promise<{
+    success: boolean;
+    status: string;
+    recordsFetched?: number;
+    latencyMs?: number;
+    message: string;
+  }> {
+    return this.request('/api/pems/test', {
+      method: 'POST',
+      body: JSON.stringify({ organizationId })
+    });
+  }
+
+  async syncPemsData(organizationId: string, syncType: 'full' | 'incremental' = 'full'): Promise<{
+    success: boolean;
+    syncId: string;
+    message: string;
+    status: string;
+  }> {
+    return this.request('/api/pems/sync', {
+      method: 'POST',
+      body: JSON.stringify({ organizationId, syncType })
+    });
+  }
+
+  async getSyncStatus(syncId: string): Promise<{
+    syncId: string;
+    status: string;
+    syncType: string;
+    recordsProcessed: number;
+    recordsInserted: number;
+    recordsUpdated: number;
+    recordsDeleted: number;
+    durationMs: number | null;
+    errorMessage: string | null;
+    createdAt: string;
+  }> {
+    return this.request(`/api/pems/sync/${syncId}`);
+  }
+
+  async getSyncHistory(organizationId: string, limit: number = 10): Promise<{ history: any[] }> {
+    return this.request(`/api/pems/history?organizationId=${organizationId}&limit=${limit}`);
+  }
+
+  // ============================================================================
   // Health Check
   // ============================================================================
 
