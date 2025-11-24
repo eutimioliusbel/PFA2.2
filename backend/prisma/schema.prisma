@@ -1,0 +1,315 @@
+// Prisma Schema for PFA Vanguard Backend
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // For development, you can use SQLite:
+  // provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// User Management
+// ============================================================================
+
+model User {
+  id                    String   @id @default(uuid())
+  username              String   @unique
+  email                 String?  @unique
+  passwordHash          String
+  firstName             String?
+  lastName              String?
+  role                  String   @default("user") // admin, user, viewer
+  isActive              Boolean  @default(true)
+
+  // Organization relationships
+  organizations         UserOrganization[]
+
+  // AI Usage tracking
+  aiUsageLogs           AiUsageLog[]
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Organization {
+  id                    String   @id @default(uuid())
+  code                  String   @unique
+  name                  String
+  description           String?
+  isActive              Boolean  @default(true)
+
+  // User relationships
+  users                 UserOrganization[]
+
+  // AI Configuration
+  aiConfig              OrganizationAiConfig?
+
+  // API Configurations
+  apiConfigs            ApiConfiguration[]
+
+  // PFA Data
+  pfaRecords            PfaRecord[]
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("organizations")
+}
+
+model UserOrganization {
+  id             String       @id @default(uuid())
+  userId         String
+  organizationId String
+  role           String       @default("member") // owner, admin, member, viewer
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@map("user_organizations")
+}
+
+// ============================================================================
+// AI Provider Configuration
+// ============================================================================
+
+model AiProvider {
+  id                    String   @id @default(uuid())
+  type                  String   // gemini, openai, anthropic, azure-openai
+  name                  String
+  enabled               Boolean  @default(true)
+
+  // Authentication (encrypted)
+  apiKeyEncrypted       String?
+  apiEndpoint           String?
+
+  // Model Configuration
+  defaultModel          String
+  availableModels       Json     // Array of model names
+
+  // Pricing (USD per 1M tokens)
+  pricingInput          Float    @default(0)
+  pricingOutput         Float    @default(0)
+  pricingCached         Float?
+
+  // Limits
+  maxTokensPerRequest   Int      @default(8192)
+  maxRequestsPerMinute  Int      @default(60)
+
+  // Retry Configuration
+  retryAttempts         Int      @default(3)
+  retryDelayMs          Int      @default(1000)
+  timeoutMs             Int      @default(30000)
+
+  // Health Status
+  status                String   @default("untested") // healthy, degraded, down, untested
+  lastHealthCheck       DateTime?
+  errorRate             Float?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("ai_providers")
+}
+
+model OrganizationAiConfig {
+  id                    String       @id @default(uuid())
+  organizationId        String       @unique
+  enabled               Boolean      @default(true)
+  accessLevel           String       @default("full-access") // full-access, read-only, disabled
+
+  // Provider Selection
+  primaryProviderId     String?
+  fallbackProviderIds   Json?        // Array of provider IDs
+
+  // Smart Routing
+  routingRules          Json?        // { simpleQueries: UUID, complexQueries: UUID }
+
+  // Budget Management
+  dailyLimitUsd         Float        @default(10.00)
+  monthlyLimitUsd       Float        @default(100.00)
+  alertThresholdPercent Int          @default(80)
+
+  // Context Configuration
+  maxContextRecords     Int          @default(50)
+  includeHistoricalData Boolean      @default(false)
+
+  // Caching
+  enableSemanticCache   Boolean      @default(true)
+  cacheExpirationHours  Int          @default(24)
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@map("organization_ai_configs")
+}
+
+model AiUsageLog {
+  id                    String   @id @default(uuid())
+  userId                String
+  organizationId        String
+
+  provider              String
+  model                 String
+
+  promptTokens          Int
+  completionTokens      Int
+  totalTokens           Int
+  costUsd               Float
+
+  latencyMs             Int?
+  cached                Boolean  @default(false)
+  success               Boolean  @default(true)
+  errorMessage          String?
+
+  queryHash             String?  // SHA-256 for deduplication
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([queryHash])
+  @@map("ai_usage_logs")
+}
+
+// ============================================================================
+// API Configuration (PEMS & External APIs)
+// ============================================================================
+
+model ApiConfiguration {
+  id                    String       @id @default(uuid())
+  organizationId        String
+
+  name                  String
+  usage                 String       // PFA, Assets, Classes, AI, Users
+
+  // Endpoint Configuration
+  url                   String
+  authType              String       // none, basic, bearer, apiKey
+  authKeyEncrypted      String?      // Encrypted credentials
+  authValueEncrypted    String?      // Encrypted credentials
+
+  // Additional Headers
+  customHeaders         Json?        // Array of {key, value}
+
+  // Read/Write Separation
+  operationType         String       @default("read") // read, write, read-write
+
+  // Data Feeds
+  feeds                 Json?        // Array of feed configurations
+
+  // Status
+  status                String       @default("untested") // connected, error, untested
+  lastChecked           DateTime?
+  lastError             String?
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@index([organizationId, usage])
+  @@map("api_configurations")
+}
+
+// ============================================================================
+// PFA Data
+// ============================================================================
+
+model PfaRecord {
+  id                    String    @id
+  pfaId                 String
+  organizationId        String
+
+  // Basic Info
+  areaSilo              String?
+  category              String?
+  forecastCategory      String?
+  class                 String?
+
+  // Source & DOR
+  source                String?   // Rental, Purchase
+  dor                   String?   // BEO, PROJECT
+
+  // Status Flags
+  isActualized          Boolean   @default(false)
+  isDiscontinued        Boolean   @default(false)
+  isFundsTransferable   Boolean   @default(false)
+
+  // Financial
+  monthlyRate           Float?
+  purchasePrice         Float?
+
+  // Equipment Details
+  manufacturer          String?
+  model                 String?
+
+  // Dates
+  originalStart         DateTime?
+  originalEnd           DateTime?
+  hasPlan               Boolean   @default(false)
+
+  forecastStart         DateTime?
+  forecastEnd           DateTime?
+
+  actualStart           DateTime?
+  actualEnd             DateTime?
+  hasActuals            Boolean   @default(false)
+
+  // References
+  contract              String?
+  equipment             String?
+
+  // Metadata
+  lastModified          DateTime?
+  lastModifiedBy        String?
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([organizationId, pfaId])
+  @@index([organizationId])
+  @@index([updatedAt])
+  @@map("pfa_records")
+}
+
+// ============================================================================
+// Sync Management
+// ============================================================================
+
+model SyncLog {
+  id                    String   @id @default(uuid())
+  organizationId        String
+
+  syncType              String   // full, incremental, manual
+  status                String   // success, error, in_progress
+
+  recordsProcessed      Int      @default(0)
+  recordsInserted       Int      @default(0)
+  recordsUpdated        Int      @default(0)
+  recordsDeleted        Int      @default(0)
+
+  durationMs            Int?
+  errorMessage          String?
+
+  triggeredBy           String?  // user ID or 'system'
+
+  createdAt             DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@map("sync_logs")
+}

@@ -1,0 +1,7 @@
+{
+  "name": "PFA Vanguard",
+  "description": "A modern asset forecasting and cost analysis tool. Features interactive Gantt-style timeline editing, real-time cost calculation, and data filtering.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
