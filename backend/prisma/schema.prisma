@@ -5,9 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  // For development, you can use SQLite:
-  // provider = "sqlite"
+  // SQLite for development (easy setup, no server required)
+  // For production, change to: provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -93,7 +93,7 @@ model AiProvider {
 
   // Model Configuration
   defaultModel          String
-  availableModels       Json     // Array of model names
+  availableModels       String   // JSON string: ["model1", "model2"]
 
   // Pricing (USD per 1M tokens)
   pricingInput          Float    @default(0)
@@ -128,10 +128,10 @@ model OrganizationAiConfig {
 
   // Provider Selection
   primaryProviderId     String?
-  fallbackProviderIds   Json?        // Array of provider IDs
+  fallbackProviderIds   String?      // JSON string: ["uuid1", "uuid2"]
 
   // Smart Routing
-  routingRules          Json?        // { simpleQueries: UUID, complexQueries: UUID }
+  routingRules          String?      // JSON string: {"simpleQueries": "uuid", "complexQueries": "uuid"}
 
   // Budget Management
   dailyLimitUsd         Float        @default(10.00)
@@ -202,13 +202,13 @@ model ApiConfiguration {
   authValueEncrypted    String?      // Encrypted credentials
 
   // Additional Headers
-  customHeaders         Json?        // Array of {key, value}
+  customHeaders         String?      // JSON string: [{"key": "x", "value": "y"}]
 
   // Read/Write Separation
   operationType         String       @default("read") // read, write, read-write
 
   // Data Feeds
-  feeds                 Json?        // Array of feed configurations
+  feeds                 String?      // JSON string: [{"category": "pfa", "frequency": "daily"}]
 
   // Status
   status                String       @default("untested") // connected, error, untested
