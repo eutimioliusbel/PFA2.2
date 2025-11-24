@@ -10,7 +10,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:seed": "tsx src/utils/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "db:seed": "npm run prisma:seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "keywords": ["pfa", "construction", "equipment", "tracking", "api"],
   "author": "",

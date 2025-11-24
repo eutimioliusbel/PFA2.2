@@ -68,23 +68,29 @@ Open http://localhost:3000
 
 ## 🔑 First-Time Setup
 
-### Create Admin User
+### Seed the Database
 
-The database is empty! Create your first admin user via API:
+The database needs initial data! Run the seed script to create:
+- Admin user (username: `admin`, password: `admin123`)
+- Default organizations (HOLNG, PEMS_Global)
+- AI provider configurations
+- PEMS API configurations
 
 ```bash
-# POST to register endpoint (you'll need to create this user first via Prisma Studio)
-# Or use Prisma Studio to create manually:
-
 cd backend
-npm run prisma:studio
+npm run prisma:seed
 ```
 
-This opens Prisma Studio in your browser. Create a user:
-- **username**: `admin`
-- **passwordHash**: Use bcrypt to hash a password (or we'll add a seed script)
-- **role**: `admin`
-- **isActive**: `true`
+You should see:
+```
+✅ Database seed completed successfully!
+
+🔐 Login Credentials:
+   Username: admin
+   Password: admin123
+```
+
+**IMPORTANT**: Change the admin password after first login!
 
 ### Configure Gemini API Key (Optional)
 

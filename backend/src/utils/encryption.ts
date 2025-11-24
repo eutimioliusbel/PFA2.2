@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import * as bcrypt from 'bcryptjs';
 import { env } from '../config/env';
 
 const ALGORITHM = 'aes-256-gcm';
@@ -55,7 +56,6 @@ export const decrypt = (encryptedData: string): string => {
  * Hash passwords (one-way)
  */
 export const hashPassword = async (password: string): Promise<string> => {
-  const bcrypt = await import('bcryptjs');
   return bcrypt.hash(password, 10);
 };
 
@@ -63,6 +63,5 @@ export const hashPassword = async (password: string): Promise<string> => {
  * Verify password against hash
  */
 export const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
-  const bcrypt = await import('bcryptjs');
   return bcrypt.compare(password, hash);
 };
