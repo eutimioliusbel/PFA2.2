@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { apiClient } from '../services/apiClient';
+import { useAuth } from '../contexts/AuthContext';
 import { Mic, Send, X, Sparkles, User as UserIcon, Bot, CheckCircle, AlertTriangle, Loader2, Filter, Volume2 } from 'lucide-react';
 import { Organization, Asset, SystemConfig, FilterState, ApiConfig } from '../types';
 import { formatDate } from '../utils';
@@ -235,9 +236,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ mode, onClose, org, as
               return;
           }
 
-          // Initialize Client Dynamically
-          const ai = new GoogleGenAI({ apiKey: apiKey });
-
+          // No need to initialize client - using backend API
           const isReadOnly = org.features.aiAccessLevel === 'read-only';
 
           // 2. Construct Prompt Context
@@ -323,12 +322,14 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ mode, onClose, org, as
           For conversational answers, just reply with text.
           `;
 
-          // 3. Call Gemini
-          const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: [
-                  { role: 'user', parts: [{ text: systemInstruction + "\n\nUser Query: " + userMsg.text }] }
-              ]
+          // 3. Call Backend API
+          const response = await apiClient.aiChat({
+              messages: [
+                  { role: 'system', content: systemInstruction },
+                  { role: 'user', content: userMsg.text }
+              ],
+              organizationId: org.id,
+              model: 'gemini-1.5-flash-002'
           });
 
           const text = response.text || "I couldn't process that request.";

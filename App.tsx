@@ -12,6 +12,7 @@ import { NewForecastForm } from './components/NewForecastForm';
 import { UserProfileModal } from './components/UserProfileModal';
 import { AiAssistant } from './components/AiAssistant';
 import { LoginScreen } from './components/LoginScreen';
+import { useAuth } from './contexts/AuthContext';
 
 // Admin Feature Components
 import { OrgManager } from './components/admin/OrgManager';
@@ -145,9 +146,19 @@ const createDefaultFilters = (cats: string[], classes: string[], dors: string[],
 });
 
 const App: React.FC = () => {
-  // --- Auth State ---
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // --- Auth State (from Context) ---
+  const { user: authUser, isAuthenticated, logout: authLogout, isLoading: authLoading } = useAuth();
+
+  // Map backend user to app user format (temporary bridge until full migration)
+  const currentUser: User | null = authUser ? {
+    id: authUser.id,
+    username: authUser.username,
+    name: `${authUser.firstName || ''} ${authUser.lastName || ''}`.trim() || authUser.username,
+    role: authUser.role,
+    organizationId: authUser.organizations[0]?.code || 'HOLNG',
+    allowedOrganizationIds: authUser.organizations.map(o => o.code),
+    themePreference: 'system'
+  } : null;
 
   // --- App State ---
   const [appMode, setAppMode] = useState<AppMode>('timeline-lab');
@@ -573,8 +584,13 @@ const App: React.FC = () => {
   const handleRedo = () => { if (!futureRef.current.length) return; historyRef.current = [...historyRef.current, allPfaRef.current]; allPfaRef.current = futureRef.current.shift()!; setCanUndo(true); setCanRedo(futureRef.current.length > 0); setDataVersion(v => v + 1); };
   const handleDiscardChanges = () => { if (window.confirm("Are you sure you want to discard all changes and revert to the baseline?")) { const restoredData = cloneAssets(baselinePfaRef.current); allPfaRef.current = restoredData; historyRef.current = []; futureRef.current = []; setHasUnsavedChanges(false); setCanUndo(false); setCanRedo(false); setSelectedIds(new Set()); setDragOverrides(null); setDataVersion(v => v + 1); setRemountKey(k => k + 1); } };
   const handleSubmitChanges = async () => { setIsSubmitting(true); setLoadingMessage("Saving changes..."); await new Promise(resolve => setTimeout(resolve, 1200)); baselinePfaRef.current = cloneAssets(allPfaRef.current); setHasUnsavedChanges(false); setDataVersion(v=>v+1); historyRef.current = []; futureRef.current = []; setCanUndo(false); setCanRedo(false); setIsSubmitting(false); setLoadingMessage(null); };
-  const handleLogin = (username: string) => { const user = users.find(u => u.username.toLowerCase() === username.toLowerCase()); if (user) { setCurrentUser(user); setIsAuthenticated(true); setAppMode('timeline-lab'); } };
-  const handleLogout = () => { setIsAuthenticated(false); setCurrentUser(null); setShowProfile(false); setShowSettings(false); setAiMode('hidden'); };
+  // Logout handler
+  const handleLogout = () => {
+    authLogout();
+    setShowProfile(false);
+    setShowSettings(false);
+    setAiMode('hidden');
+  };
 
   const MenuItem = ({ label, icon: Icon, active, onClick }: { label: string, icon: any, active: boolean, onClick: () => void }) => (
       <button
@@ -598,8 +614,20 @@ const App: React.FC = () => {
       </div>
   );
 
+  // Show loading screen while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-slate-900">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated || !currentUser) {
-      return <LoginScreen onLogin={handleLogin} config={systemConfig} users={users} />;
+    return <LoginScreen config={systemConfig} />;
   }
   
   // Determine if current view is a Lab view (timeline/matrix/grid)

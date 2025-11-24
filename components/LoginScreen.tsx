@@ -1,45 +1,38 @@
 
 import React, { useState } from 'react';
-import { Lock, User, ShieldCheck, FileSpreadsheet } from 'lucide-react';
-import { SystemConfig, User as UserType } from '../types';
+import { Lock, User, ShieldCheck, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { SystemConfig } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LoginScreenProps {
-  onLogin: (username: string, role: 'admin' | 'user') => void;
   config: SystemConfig;
-  users: UserType[];
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, config, users }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ config }) => {
+  const { login, error: authError } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Find user in the system
-    const validUser = users.find(u => u.username.toLowerCase() === username.toLowerCase());
 
-    let isValidPassword = false;
-
-    // Priority check for hardcoded admin credentials to ensure access is always possible
-    if (username.toLowerCase() === 'admin' && password === 'admin') {
-        isValidPassword = true;
-    } else if (validUser) {
-        if (validUser.password) {
-            // User has a custom password set
-            isValidPassword = validUser.password === password;
-        } else {
-            // User has no custom password, check default mock password
-            isValidPassword = password === 'ubi123';
-        }
+    if (!username || !password) {
+      setError('Please enter both username and password');
+      return;
     }
 
-    if (isValidPassword) {
-        // Use the valid user object if found, otherwise fallback to generic admin session
-        onLogin(validUser ? validUser.username : 'admin', validUser ? validUser.role : 'admin');
-    } else {
-        setError('Invalid credentials provided.');
+    try {
+      setError('');
+      setIsLoading(true);
+      await login(username, password);
+      // Login successful - AuthContext will handle state updates
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -144,11 +137,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, config, users
                     </div>
                 </div>
 
-                <button 
+                <button
                   type="submit"
-                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 transition-transform active:scale-[0.98] text-sm"
+                  disabled={isLoading}
+                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
                 >
-                  Login
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Logging in...</span>
+                    </>
+                  ) : (
+                    'Login'
+                  )}
                 </button>
 
             </form>
