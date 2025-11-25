@@ -1,0 +1,1466 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Category Webservice",
+    "version": "1",
+    "description": " - **Sample {id} parameter value**: CATCODE1 \n - **POST/PUT webservice request construction tip**: Copy content of **EquipmentCategory** element from **GET** webservice response and use it as a **template**"
+  },
+  "externalDocs": {
+    "description": "Swagger Entity Reference Document",
+    "url": "https://hexagonppm.fluidtopics.net/access/sources/AITM/topic?ft=1469131&Version_EAM=12.3&ft=en-US"
+  },
+  "servers": [
+    {
+      "url": "{eamhost}/axis/restservices",
+      "description": "EAM Rest Service",
+      "variables": {
+        "eamhost": {
+          "default": "https://us1.eam.hxgnsmartcloud.com:443",
+          "description": "The EAM host on which the EAM instance is deployed"
+        }
+      }
+    }
+  ],
+  "paths": {
+      "/categories": {
+         "post": {
+            "summary": "Add Equipment Category",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            }
+            ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentCategory"
+              },
+              "examples": {
+                "example1": {
+                  "$ref": "#/components/examples/example1"
+                },
+                "example2": {
+                  "$ref": "#/components/examples/example2"
+                },
+                "example3": {
+                  "$ref": "#/components/examples/example4"
+                }
+              }
+            }
+          }
+        },
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/AddResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/AddResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }, 
+         "put": {
+            "summary": "Sync Equipment Category",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            }
+            ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentCategory"
+              },
+              "examples": {
+                "example1": {
+                  "$ref": "#/components/examples/example1"
+                },
+                "example2": {
+                  "$ref": "#/components/examples/example2"
+                },
+                "example3": {
+                  "$ref": "#/components/examples/example4"
+                }
+              }
+            }
+          }
+        },
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/SyncResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/SyncResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         },
+         "get": {
+            "summary": "Get Equipment Category Collection",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            },
+            {
+              "name": "clonedscreen",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "clone screen function"
+              }
+            },
+            {
+              "name": "cursorposition",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "integer",
+                 "description": "cursor position"
+              }
+            }
+            ],
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/GetCollectionResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/GetCollectionResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }
+      },
+      "/categories/{id}": {
+         "get": {
+            "summary": "Get Equipment Category",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            },
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                 "type": "string",
+                 "description": "id of the object"
+               }
+             }
+            ],
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/GetResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/GetResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }, 
+         "delete": {
+            "summary": "Delete Equipment Category",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            },
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                 "type": "string",
+                 "description": "id of the object"
+               }
+             }
+            ],
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/DeleteResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/DeleteResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }, 
+         "patch": {
+            "summary": "Update selective fields of Equipment Category",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            },
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                 "type": "string",
+                 "description": "id of the object"
+               }
+             }
+            ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentCategory"
+              },
+              "examples": {
+                "example1": {
+                  "$ref": "#/components/examples/example1"
+                },
+                "example2": {
+                  "$ref": "#/components/examples/example2"
+                },
+                "example3": {
+                  "$ref": "#/components/examples/example3"
+                },
+                "example4": {
+                  "$ref": "#/components/examples/example4"
+                }
+              }
+            }
+          }
+        },
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/SyncResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/SyncResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }
+      }
+  },
+  "components": {
+    "schemas": {
+      "EquipmentCategory": {
+        "required": ["CATEGORYID","CLASSID"], 
+        "type": "object",
+         "properties": {
+            "CATEGORYID": {
+               "$ref": "#/components/schemas/CATEGORYID"
+            },
+            "CLASSID": {
+               "$ref": "#/components/schemas/CLASSID_Type"
+            },
+            "MANUFACTURERID": {
+               "$ref": "#/components/schemas/MANUFACTURERID_Type"
+            },
+            "USERDEFINEDAREA": {
+               "$ref": "#/components/schemas/USERDEFINEDAREA"
+            },
+            "SAFETYDATEREVIEWREQUIRED": {
+               "$ref": "#/components/schemas/DATETIME"
+            },
+            "SAFETYREVIEWEDBY": {
+               "$ref": "#/components/schemas/USERID_Type"
+            },
+            "PERMITDATEREVIEWREQUIRED": {
+               "$ref": "#/components/schemas/DATETIME"
+            },
+            "PERMITREVIEWEDBY": {
+               "$ref": "#/components/schemas/USERID_Type"
+            },
+            "SCHEMATICID": {
+               "$ref": "#/components/schemas/USERDEFINEDCODEID_Type"
+            },
+            "PIDNUMBER": {
+               "type":"string"
+            },
+            "PIDDRAWING": {
+               "type":"string"
+            },
+            "ACCOUNTSEGMENTVALUE": {
+               "type":"string"
+            },
+            "recordid": {
+               "type":"number"
+            },
+            "user_entity": {
+               "type":"string"
+            },
+            "system_entity": {
+               "type":"string"
+            }
+         }
+      },
+      "CATEGORYID": {
+         "type": "object",
+         "required": ["CATEGORYCODE"], 
+         "properties": {
+            "CATEGORYCODE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "LOVSETTINGS": {
+         "type": "object",
+         "required": ["LOV_TYPE","LOV_VALIDATE"], 
+         "properties": {
+            "LOV_TYPE": {
+               "type":"string"
+            },
+            "LOV_VALIDATE": {
+               "type":"string"
+            }
+         }
+      },
+      "CODEDESCFIELD": {
+         "type": "object",
+         "required": ["CODEVALUE"], 
+         "properties": {
+            "CODEVALUE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "USERID_Type": {
+         "type": "object",
+         "required": ["USERCODE"], 
+         "properties": {
+            "USERCODE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "USERDEFINEDCODEID_Type": {
+         "type": "object",
+         "required": ["USERDEFINEDCODE"], 
+         "properties": {
+            "ENTITY": {
+               "type":"string"
+            },
+            "USERDEFINEDCODE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "VALUESOURCE": {
+         "type": "object",
+         "required": ["CATVALUE","NONUPDATEABLE"], 
+         "properties": {
+            "CATVALUE": {
+               "type":"string"
+            },
+            "NONUPDATEABLE": {
+               "type":"string"
+            }
+         }
+      },
+      "USERDEFINEDAREA": {
+         "type": "object",
+         "properties": {
+            "CUSTOMFIELD": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/CUSTOMFIELD"
+               } 
+            },
+            "STATUSCODE": {
+               "type":"string"
+            },
+            "customfieldlimitexceeded": {
+               "type":"string"
+            }
+         }
+      },
+      "CUSTOMFIELD": {
+        "required": ["PROPERTYCODE","PROPERTYLABEL","CLASSID"], 
+        "type": "object",
+         "properties": {
+            "PROPERTYCODE": {
+               "type":"string"
+            },
+            "PROPERTYLABEL": {
+               "type":"string"
+            },
+            "CLASSID": {
+               "$ref": "#/components/schemas/CLASSID_Type"
+            },
+            "DATEFIELD": {
+               "$ref": "#/components/schemas/DATETIME"
+            },
+            "DATETIMEFIELD": {
+               "$ref": "#/components/schemas/DATETIME"
+            },
+            "NUMBERFIELD": {
+               "$ref": "#/components/schemas/QUANTITY"
+            },
+            "TEXTFIELD": {
+               "type":"string"
+            },
+            "CODEDESCFIELD": {
+               "$ref": "#/components/schemas/CODEDESCFIELD"
+            },
+            "ENTITYCODEFIELD": {
+               "$ref": "#/components/schemas/ENTITYCODEFIELD"
+            },
+            "MAXVALUE": {
+               "type":"string"
+            },
+            "MINVALUE": {
+               "type":"string"
+            },
+            "UOM": {
+               "type":"string"
+            },
+            "LOVSETTINGS": {
+               "$ref": "#/components/schemas/LOVSETTINGS"
+            },
+            "VALUESOURCE": {
+               "$ref": "#/components/schemas/VALUESOURCE"
+            },
+            "GROUPLABEL": {
+               "type":"string"
+            },
+            "CUSTOMFIELDREVISIONCONTROL": {
+               "type":"string"
+            },
+            "index": {
+               "type":"number"
+            },
+            "entity": {
+               "type":"string"
+            },
+            "type": {
+               "type":"string"
+            },
+            "changed": {
+               "type":"string"
+            }
+         }
+      },
+      "DATETIME": {
+         "type": "object",
+         "required": ["YEAR","MONTH","DAY","HOUR","MINUTE","SECOND","SUBSECOND","TIMEZONE"], 
+         "properties": {
+            "YEAR": {
+               "type":"number","format":"utc-millisec"
+            },
+            "MONTH": {
+               "type":"number"
+            },
+            "DAY": {
+               "type":"number"
+            },
+            "HOUR": {
+               "type":"number"
+            },
+            "MINUTE": {
+               "type":"number"
+            },
+            "SECOND": {
+               "type":"number"
+            },
+            "SUBSECOND": {
+               "type":"number"
+            },
+            "TIMEZONE": {
+               "type":"string"
+            },
+            "qualifier": {
+               "type":"string","enum":["ACCOUNTING","ACTEND","ACTSTART","APPREQ","APPROVAL","AVAILABLE","BKTEND","BKTSTART","CANCEL","CHANGEDATE","COMPDATE","CONSUME","CREATION","CUMULATIVE","DELIVACT","DELIVSCHED","DISCNT","DOCUMENT","DUE","EARLSTEFF","EARLSTSHIP","EFFECTIVE","ENGCHG","EXECFINISH","EXECSTART","EXPIRATION","FAILDATE","FORECASTF","FORECASTS","FROM","GENERATION","JOBDUE","IMPL","INVOICE","LABORFINSH","LABORSTART","LASTUSED","LOADING","MATCHING","MSMENTDATE","NEEDDELV","OPFINISH","OPSTART","PAYEND","PLANEND","PLANSTART","PO","PROMDELV","PROMSHIP","PYMTTERM","RECEIVED","REPORTDATE","REPORTNGFN","REPORTNGST","REQUIRED","RESORCDWNF","RESORCDWNS","RSPDDATE","RSPDOCGEN","SCHEND","SCHSTART","SETUPFINSH","SETUPSTART","SHIP","SHIPSCHED","STATUSDATE","TEARDOWNF","TEARDOWNS","TO","OTHER"]
+            }
+         }
+      },
+      "MANUFACTURERID_Type": {
+         "type": "object",
+         "required": ["MANUFACTURERCODE"], 
+         "properties": {
+            "MANUFACTURERCODE": {
+               "type":"string"
+            },
+            "ORGANIZATIONID": {
+               "$ref": "#/components/schemas/ORGANIZATIONID_Type"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "QUANTITY": {
+         "type": "object",
+         "required": ["VALUE","NUMOFDEC","SIGN","UOM"], 
+         "properties": {
+            "VALUE": {
+               "type":"number"
+            },
+            "NUMOFDEC": {
+               "type":"number"
+            },
+            "SIGN": {
+               "type":"string"
+            },
+            "UOM": {
+               "type":"string"
+            },
+            "qualifier": {
+               "type":"string"
+            }
+         }
+      },
+      "ORGANIZATIONID_Type": {
+         "type": "object",
+         "required": ["ORGANIZATIONCODE"], 
+         "properties": {
+            "ORGANIZATIONCODE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "ENTITYCODEFIELD": {
+         "type": "object",
+         "required": ["CODEVALUE"], 
+         "properties": {
+            "CODEVALUE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            },
+            "entity": {
+               "type":"string"
+            }
+         }
+      },
+      "CLASSID_Type": {
+         "type": "object",
+         "required": ["CLASSCODE"], 
+         "properties": {
+            "CLASSCODE": {
+               "type":"string"
+            },
+            "ORGANIZATIONID": {
+               "$ref": "#/components/schemas/ORGANIZATIONID_Type"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "ALERT_Type": {
+        "type": "object",
+         "properties": {
+            "Message": {
+               "type":"string"
+            },
+            "Name": {
+               "type":"string"
+            }
+         }
+      },
+      "AddResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/AddResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "SyncResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/SyncResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "GetCollectionResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/GetCollectionResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "GetResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/GetResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "DeleteResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/DeleteResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "AddResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/AddResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "SyncResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/SyncResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "GetCollectionResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/GetCollectionResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "GetResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/GetResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "DeleteResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/DeleteResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "AddResultData": {
+         "type": "object",
+         "properties": {
+            "CATEGORYID": {
+                  "$ref": "#/components/schemas/CATEGORYID"
+            }
+         }
+      },
+      "SyncResultData": {
+         "type": "object",
+         "properties": {
+            "CATEGORYID": {
+                  "$ref": "#/components/schemas/CATEGORYID"
+            }
+         }
+      },
+      "GetCollectionResultData": {
+        "type": "object",
+         "properties": {
+            "DATAENTITYNAME": {
+               "type":"string"
+            },
+            "CURRENTCURSORPOSITION": {
+               "type":"number"
+            },
+            "NEXTCURSORPOSITION": {
+               "type":"number"
+            },
+            "RECORDS": {
+               "type":"number"
+            },
+            "DATARECORD": {
+               "type":"array",
+               "items": {
+                   "$ref": "#/components/schemas/EquipmentCategory"
+                }
+            }
+         }
+      },
+      "GetResultData": {
+         "type": "object",
+         "properties": {
+            "EquipmentCategory": {
+                  "$ref": "#/components/schemas/EquipmentCategory"
+            }
+         }
+      },
+      "DeleteResultData": {
+         "type": "object",
+         "properties": {
+            "CATEGORYID": {
+                  "$ref": "#/components/schemas/CATEGORYID"
+            }
+         }
+      }
+    },
+
+  "examples" : {
+    "example2" : {
+      "summary" : "An example with required fields",
+      "value" : {
+        "CATEGORYID" : {
+          "CATEGORYCODE" : "CAT1",
+          "DESCRIPTION" : "CAT1"
+        },
+        "CLASSID" : {
+          "CLASSCODE" : "*",
+          "ORGANIZATIONID" : {
+            "ORGANIZATIONCODE" : "ORG1",
+            "DESCRIPTION" : "ORG1"
+          }
+        },
+        "recordid" : 0
+      }
+    },
+    "example1" : {
+      "summary" : "An example with sample fields",
+      "value" : {
+        "CATEGORYID" : {
+          "CATEGORYCODE" : "CAT1",
+          "DESCRIPTION" : "Cat1"
+        },
+        "CLASSID" : {
+          "CLASSCODE" : "*",
+          "ORGANIZATIONID" : {
+            "ORGANIZATIONCODE" : "*",
+            "DESCRIPTION" : "Default organization",
+            "entity" : null
+          },
+          "DESCRIPTION" : "All classes",
+          "entity" : "OBJ"
+        },
+        "MANUFACTURERID" : null,
+        "USERDEFINEDAREA" : {
+          "CUSTOMFIELD" : null,
+          "STATUSCODE" : null,
+          "customfieldlimitexceeded" : null
+        },
+        "SAFETYDATEREVIEWREQUIRED" : null,
+        "SAFETYREVIEWEDBY" : null,
+        "PERMITDATEREVIEWREQUIRED" : null,
+        "PERMITREVIEWEDBY" : null,
+        "SCHEMATICID" : null,
+        "PIDNUMBER" : "10",
+        "PIDDRAWING" : "20",
+        "ACCOUNTSEGMENTVALUE" : "1",
+        "recordid" : 0
+      }
+    },
+    "example3" : {
+      "summary" : "An example for patch. This is for patch only not for post and put.",
+      "value" : {
+        "CATEGORYID" : {
+          "DESCRIPTION" : "CAT1 Updated"
+        }
+      }
+    },
+    "example4" : {
+      "summary" : "All available fields"
+    }
+  }
+,    "requestBodies": {
+      "EquipmentCategory": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EquipmentCategory"
+             }
+           }
+        },
+        "required": true
+      }
+    },
+    "securitySchemes": {
+      "basicAuth": {
+         "type": "http",
+         "scheme": "basic"
+      },
+      "apiKey": {
+         "type": "apiKey",
+         "in": "header",
+         "name": "X-API-Key"
+      },
+      "bearerAuth": {
+         "type": "http",
+         "scheme": "bearer",
+         "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "basicAuth": [] 
+    },
+    {
+      "apiKey": [] 
+    },
+    {
+      "bearerAuth": [] 
+    }
+  ]
+}

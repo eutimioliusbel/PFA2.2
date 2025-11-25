@@ -1,0 +1,945 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Grid Data Webservice",
+    "version": "1"
+  },
+  "servers": [
+    {
+      "url": "{eamhost}/axis/restservices",
+      "description": "EAM Rest Service",
+      "variables": {
+        "eamhost": {
+          "default": "https://us1.eam.hxgnsmartcloud.com:443",
+          "description": "The EAM host on which the EAM instance is deployed"
+        }
+      }
+    }
+  ],
+  "paths": {
+      "/griddata": {
+         "post": {
+            "summary": "Get Grid Data",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            }
+            ],
+            "requestBody": {
+               "$ref": "#/components/requestBodies/GridData"
+            },
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/AddResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/AddResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }
+      }
+  },
+  "components": {
+    "schemas": {
+      "GridData": {
+        "required": ["GRID","GRID_TYPE"], 
+        "type": "object",
+         "properties": {
+            "GRID": {
+               "$ref": "#/components/schemas/GRID"
+            },
+            "ADDON_SORT": {
+               "$ref": "#/components/schemas/ADDON_SORT"
+            },
+            "ADDON_FILTER": {
+               "$ref": "#/components/schemas/ADDON_FILTER"
+            },
+            "MULTIADDON_FILTERS": {
+               "$ref": "#/components/schemas/MULTIADDON_FILTERS"
+            },
+            "GRID_TYPE": {
+               "$ref": "#/components/schemas/GRID_TYPE"
+            },
+            "DATASPY": {
+               "$ref": "#/components/schemas/DATASPY"
+            },
+            "LOV": {
+               "$ref": "#/components/schemas/LOV"
+            },
+            "REQUEST_TYPE": {
+               "type":"string","enum":["LIST.COUNT.STORED","LIST.DATA_ONLY.STORED","LIST.HEAD_ONLY.STORED","LOV.DATA_ONLY.STORED"]
+            }
+         }
+      },
+      "ADDON_FILTER": {
+         "type": "object",
+         "properties": {
+            "ALIAS_NAME": {
+               "type":"string"
+            },
+            "OPERATOR": {
+               "type":"string"
+            },
+            "VALUE": {
+               "type":"string"
+            }
+         }
+      },
+      "ADDON_SORT": {
+         "type": "object",
+         "properties": {
+            "ALIAS_NAME": {
+               "type":"string"
+            },
+            "TYPE": {
+               "type":"string","enum":["ASC","DESC"]
+            }
+         }
+      },
+      "LOV": {
+         "type": "object",
+         "properties": {
+            "LOV_PARAMETERS": {
+               "$ref": "#/components/schemas/LOV_PARAMETERS"
+            }
+         }
+      },
+      "MULTIADDON_FILTERS": {
+         "type": "object",
+         "properties": {
+            "MADDON_FILTER": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/MADDON_FILTER"
+               }
+            }
+         }
+      },
+      "GRID": {
+         "type": "object",
+         "properties": {
+            "GRID_NAME": {
+               "type":"string"
+            },
+            "USER_FUNCTION_NAME": {
+               "type":"string"
+            },
+            "GRID_ID": {
+               "type":"number"
+            },
+            "NUMBER_OF_ROWS_FIRST_RETURNED": {
+               "type":"number"
+            },
+            "CURSOR_POSITION": {
+               "type":"number"
+            },
+            "CURRENT_TAB_NAME": {
+               "type":"string"
+            },
+            "TAB_NAME": {
+               "type":"string"
+            },
+            "RESULT_IN_SAXORDER": {
+               "type":"string"
+            },
+            "TERSERESPONSE": {
+               "type":"string"
+            },
+            "LOCALIZE_RESULT": {
+               "type":"string"
+            },
+            "CUSTOM_FIELDS_CLASS_FILTER": {
+               "type":"string"
+            },
+            "WSGRIDSZ_OVERRIDE": {
+               "type":"number"
+            }
+         }
+      },
+      "MADDON_FILTER": {
+         "type": "object",
+         "properties": {
+            "ALIAS_NAME": {
+               "type":"string"
+            },
+            "OPERATOR": {
+               "type":"string"
+            },
+            "VALUE": {
+               "type":"string"
+            },
+            "RPAREN": {
+               "type":"string"
+            },
+            "LPAREN": {
+               "type":"string"
+            },
+            "JOINER": {
+               "type":"string","enum":["AND","OR"]
+            },
+            "SEQNUM": {
+               "type":"number"
+            }
+         }
+      },
+      "GRID_TYPE": {
+         "type": "object",
+         "properties": {
+            "TYPE": {
+               "type":"string","enum":["LIST","LOV"]
+            }
+         }
+      },
+      "LOV_PARAMETERS": {
+         "type": "object",
+         "properties": {
+            "LOV_PARAMETER": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/LOV_PARAMETER"
+               }
+            }
+         }
+      },
+      "LOV_PARAMETER": {
+         "type": "object",
+         "properties": {
+            "ALIAS_NAME": {
+               "type":"string"
+            },
+            "TYPE": {
+               "type":"string"
+            },
+            "VALUE": {
+               "type":"string"
+            }
+         }
+      },
+      "DATASPY": {
+         "type": "object",
+         "properties": {
+            "DATASPY_ID": {
+               "type":"number"
+            }
+         }
+      },
+      "SORTABLEFLDS": {
+         "type": "object",
+         "properties": {
+            "names": {
+               "type":"string"
+            }
+         }
+      },
+      "DISPLAYABLEFLDS": {
+         "type": "object",
+         "properties": {
+            "names": {
+               "type":"string"
+            }
+         }
+      },
+      "FILTERABLEFLDS": {
+         "type": "object",
+         "properties": {
+            "names": {
+               "type":"string"
+            }
+         }
+      },
+      "ROW": {
+         "type": "object",
+         "properties": {
+            "dataspylist_options": {
+               "$ref": "#/components/schemas/Dataspylist_Options"
+            },
+            "dataspylist_display": {
+               "type":"string"
+            },
+            "dataspylist": {
+               "type":"string"
+            },
+            "filterfields_options": {
+               "$ref": "#/components/schemas/Filterfields_Options"
+            },
+            "filterfields_display": {
+               "type":"string"
+            },
+            "filterfields": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/Filterfields_Type"
+               }
+            }
+         }
+      },
+      "GRIDHINTS": {
+         "type": "object",
+         "properties": {
+            "hints": {
+               "type":"string"
+            }
+         }
+      },
+      "Dataspylist_Options": {
+         "type": "object",
+         "properties": {
+            "option": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/Option"
+               }
+            }
+         }
+      },
+      "R": {
+         "type": "object",
+         "properties": {
+            "D": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/D"
+               }
+            }
+         }
+      },
+      "FIELD": {
+         "type": "object",
+         "properties": {
+            "type": {
+               "type":"string","enum":["VARCHAR","MIXVARCHAR","NUMBER","CONTAINS","LONG","CURRENCY","DECIMAL","DURATION","DATE","DATETIME","CHKBOOLEAN","TSMIDNIGHT","DEPENDENT","CLOB"]
+            },
+            "control": {
+               "type":"string"
+            },
+            "events": {
+               "type":"string"
+            },
+            "filterable": {
+               "type":"string"
+            },
+            "keyfield": {
+               "type":"string"
+            },
+            "label": {
+               "type":"string"
+            },
+            "lookup": {
+               "type":"string"
+            },
+            "name": {
+               "type":"string"
+            },
+            "order": {
+               "type":"string"
+            },
+            "visible": {
+               "type":"string"
+            },
+            "width": {
+               "type":"string"
+            },
+            "aliasnum": {
+               "type":"number"
+            },
+            "sortable": {
+               "type":"string"
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "FIELDS": {
+         "type": "object",
+         "properties": {
+            "FIELD": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/FIELD"
+               }
+            },
+            "viewtype": {
+               "type":"string","enum":["LIST","LOV"]
+            },
+            "visibleColumn": {
+               "type":"string"
+            },
+            "visiblerowcount": {
+               "type":"string"
+            }
+         }
+      },
+      "SORT_ELEMENT": {
+         "type": "object",
+         "properties": {
+            "ALIAS_NAME": {
+               "type":"string"
+            },
+            "SEQNUM": {
+               "type":"string"
+            },
+            "TYPE": {
+               "type":"string"
+            }
+         }
+      },
+      "DEFAULT": {
+         "type": "object",
+         "properties": {
+            "flag": {
+               "type":"boolean"
+            }
+         }
+      },
+      "SECURITYDSP": {
+         "type": "object",
+         "properties": {
+            "sec": {
+               "type":"string"
+            }
+         }
+      },
+      "SORTABLE": {
+         "type": "object",
+         "properties": {
+            "SORT_ELEMENT": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/SORT_ELEMENT"
+               }
+            }
+         }
+      },
+      "DATASPYDETAIL": {
+         "type": "object",
+         "properties": {
+            "SORTABLEFLDS": {
+               "$ref": "#/components/schemas/SORTABLEFLDS"
+            },
+            "DEFAULT": {
+               "$ref": "#/components/schemas/DEFAULT"
+            },
+            "DISPLAYABLEFLDS": {
+               "$ref": "#/components/schemas/DISPLAYABLEFLDS"
+            },
+            "FILTERABLEFLDS": {
+               "$ref": "#/components/schemas/FILTERABLEFLDS"
+            },
+            "SORTABLE": {
+               "$ref": "#/components/schemas/SORTABLE"
+            },
+            "ALLOWADVANCEDFILTERS": {
+               "type":"boolean"
+            },
+            "DATASPYHINTS": {
+               "$ref": "#/components/schemas/DATASPYHINTS"
+            },
+            "GRIDHINTS": {
+               "$ref": "#/components/schemas/GRIDHINTS"
+            },
+            "SECURITYDSP": {
+               "$ref": "#/components/schemas/SECURITYDSP"
+            },
+            "FILTERGROUPS": {
+               "$ref": "#/components/schemas/FILTERGROUPS"
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "TOOLBARFIELD": {
+         "type": "object",
+         "properties": {
+            "OPTION": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/OPTION"
+               }
+            },
+            "name": {
+               "type":"string"
+            },
+            "label": {
+               "type":"string"
+            },
+            "type": {
+               "type":"string"
+            },
+            "width": {
+               "type":"string"
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "RESULTGRID": {
+         "type": "object",
+         "properties": {
+            "METADATA": {
+               "$ref": "#/components/schemas/METADATA"
+            },
+            "DATA": {
+               "$ref": "#/components/schemas/DATA"
+            },
+            "TOTAL-COUNT": {
+               "type":"string"
+            },
+            "FIELDS": {
+               "$ref": "#/components/schemas/FIELDS"
+            }
+         }
+      },
+      "DATASPYHINTS": {
+         "type": "object",
+         "properties": {
+            "hints": {
+               "type":"string"
+            }
+         }
+      },
+      "DATA": {
+         "type": "object",
+         "properties": {
+            "ROW": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/DATAROW"
+               }
+            },
+            "R": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/R"
+               }
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "Filterfields_Options": {
+         "type": "object",
+         "properties": {
+            "option": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/Option"
+               }
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "HASCREATEAUTH": {
+         "type": "object",
+         "properties": {
+            "hasauth": {
+               "type":"string"
+            }
+         }
+      },
+      "DATAROW": {
+         "type": "object",
+         "properties": {
+            "D": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/D"
+               }
+            },
+            "id": {
+               "type":"number"
+            }
+         }
+      },
+      "D": {
+         "type": "object",
+         "properties": {
+            "value": {
+               "type":"string"
+            },
+            "n": {
+               "type":"number"
+            }
+         }
+      },
+      "OPTION": {
+         "type": "object",
+         "properties": {
+            "datatype": {
+               "type":"string"
+            },
+            "label": {
+               "type":"string"
+            },
+            "value": {
+               "type":"string"
+            },
+            "selected": {
+               "type":"string"
+            }
+         }
+      },
+      "TOOLBAR": {
+         "type": "object",
+         "properties": {
+            "FIELD": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/TOOLBARFIELD"
+               }
+            },
+            "DATASPYDETAIL": {
+               "$ref": "#/components/schemas/DATASPYDETAIL"
+            },
+            "FIELDVALUES": {
+               "$ref": "#/components/schemas/FIELDVALUES"
+            },
+            "editdataspy": {
+               "type":"string"
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "FIELDVALUES": {
+         "type": "object",
+         "properties": {
+            "ROW": {
+               "$ref": "#/components/schemas/ROW"
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "Filterfields_Type": {
+         "type": "object",
+         "properties": {
+            "value": {
+               "type":"string"
+            },
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "RESULTDATASPY": {
+         "type": "object",
+         "properties": {
+            "id": {
+               "type":"string"
+            },
+            "label": {
+               "type":"string"
+            }
+         }
+      },
+      "Option": {
+         "type": "object",
+         "properties": {
+            "display": {
+               "type":"string"
+            },
+            "value": {
+               "type":"string"
+            }
+         }
+      },
+      "METADATA": {
+         "type": "object",
+         "properties": {
+            "REQUEST_TYPE_META": {
+               "type":"string"
+            },
+            "RECORDS": {
+               "type":"string"
+            },
+            "BLACKLISTVIOLATIONS": {
+               "type":"number"
+            },
+            "CLIENTROWS": {
+               "type":"number"
+            },
+            "ISSYSTEMUSER": {
+               "type":"string"
+            },
+            "ISR5USER": {
+               "type":"boolean"
+            },
+            "CUSTOM_FIELD_ENTITY": {
+               "type":"string"
+            },
+            "PORTLETROWS": {
+               "type":"number"
+            },
+            "MORERECORDPRESENT": {
+               "type":"string"
+            },
+            "CURRENTCURSORPOSITION": {
+               "type":"number"
+            },
+            "SERVERTIMESTAMP": {
+               "type":"number"
+            },
+            "MULTIORGCOLUMN": {
+               "type":"string"
+            },
+            "PORTLETFLAG": {
+               "type":"string"
+            },
+            "HASCREATEAUTH": {
+               "$ref": "#/components/schemas/HASCREATEAUTH"
+            },
+            "EDITABLE": {
+               "type":"string"
+            },
+            "GRIDID": {
+               "type":"number"
+            },
+            "GRIDNAME": {
+               "type":"string"
+            },
+            "GRIDLABEL": {
+               "type":"string"
+            },
+            "GRIDTYPE": {
+               "type":"number"
+            },
+            "DATASPYID": {
+               "type":"number"
+            },
+            "GLOBALDATASPY": {
+               "type":"boolean"
+            },
+            "DATASPYHIDDEN": {
+               "type":"boolean"
+            },
+            "ALLOWEDITGLOBALDATASPY": {
+               "type":"boolean"
+            },
+            "DSUPDATECOUNT": {
+               "type":"number"
+            },
+            "MULTIORG": {
+               "type":"string"
+            },
+            "ISTAB": {
+               "type":"string"
+            },
+            "EDITDATASPY": {
+               "type":"string"
+            }
+         }
+      },
+      "FILTERGROUPS": {
+         "type": "object",
+         "properties": {
+            "jsonclass": {
+               "type":"string"
+            }
+         }
+      },
+      "ALERT_Type": {
+        "type": "object",
+         "properties": {
+            "Message": {
+               "type":"string"
+            },
+            "Name": {
+               "type":"string"
+            }
+         }
+      },
+      "AddResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/AddResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "AddResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/AddResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "AddResultData": {
+        "type": "object",
+         "properties": {
+            "DATASPY": {
+               "$ref": "#/components/schemas/RESULTDATASPY"
+            },
+            "TOOLBAR": {
+               "$ref": "#/components/schemas/TOOLBAR"
+            },
+            "GRID": {
+               "$ref": "#/components/schemas/RESULTGRID"
+            },
+            "type": {
+               "type":"string","enum":["LIST.COUNT.STORED","LIST.DATA_ONLY.STORED","LOV.DATA_ONLY.STORED","LIST.LAYOUT.SAVE.OTF"]
+            }
+         }
+      }
+    },
+    "requestBodies": {
+      "GridData": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GridData"
+             }
+           }
+        },
+        "required": true
+      }
+    },
+    "securitySchemes": {
+      "basicAuth": {
+         "type": "http",
+         "scheme": "basic"
+      },
+      "apiKey": {
+         "type": "apiKey",
+         "in": "header",
+         "name": "X-API-Key"
+      },
+      "bearerAuth": {
+         "type": "http",
+         "scheme": "bearer",
+         "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "basicAuth": [] 
+    },
+    {
+      "apiKey": [] 
+    },
+    {
+      "bearerAuth": [] 
+    }
+  ]
+}

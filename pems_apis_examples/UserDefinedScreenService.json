@@ -1,0 +1,375 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "UserDefinedScreenService Webservice",
+    "version": "1",
+    "description": "This will be used to process add/update/get/delete requests"
+  },
+  "servers": [
+    {
+      "url": "{eamhost}/axis/restservices",
+      "description": "EAM Rest Service",
+      "variables": {
+        "eamhost": {
+          "default": "https://us1.eam.hxgnsmartcloud.com:443",
+          "description": "The EAM host on which the EAM instance is deployed"
+        }
+      }
+    }
+  ],
+  "paths": {
+      "/userdefinedscreenservices": {
+         "post": {
+            "summary": "Process UserDefinedScreenService",
+            "parameters": [
+            {
+              "name": "tenant",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM tenant"
+              }
+            },
+            {
+              "name": "role",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM user role"
+              }
+            },
+            {
+              "name": "organization",
+              "in": "header",
+              "required": true,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "EAM Organization"
+              }
+            },
+            {
+              "name": "apiversion",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "API version"
+              }
+            },
+            {
+              "name": "sessionid",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "sessionid"
+              }
+            },
+            {
+              "name": "keepsession",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "keep session alive"
+              }
+            },
+            {
+              "name": "authenticationmode",
+              "in": "header",
+              "required": false,
+              "style": "simple",
+              "explode": false,
+              "schema": {
+                 "type": "string",
+                 "description": "Authentication Mode"
+              }
+            }
+            ],
+            "requestBody": {
+               "$ref": "#/components/requestBodies/UserDefinedScreenService"
+            },
+            "responses": {
+               "200": {
+                  "description": "OK",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/ProcessResponse"
+                         }
+                       }
+                  }
+               },
+               "400": {
+                  "description": "Bad Request. Request is not valid",
+                  "content": {
+                     "application/json": {
+                         "schema": {
+                            "$ref": "#/components/schemas/ProcessResponse"
+                         }
+                       }
+                  }
+               },
+               "500": {
+                  "description": "Internal Server Error"
+                }
+            }
+         }
+      }
+  },
+  "components": {
+    "schemas": {
+      "UserDefinedScreenService": {
+        "required": ["USERDEFINEDSCREENNAME","USERDEFINEDSERVICEACTION","USERDEFINEDSCREENFIELDVALUELIST"], 
+        "type": "object",
+         "properties": {
+            "USERDEFINEDSCREENNAME": {
+               "type":"string"
+            },
+            "USERDEFINEDSERVICEACTION": {
+               "type":"string"
+            },
+            "USERDEFINEDSCREENFIELDVALUELIST": {
+               "$ref": "#/components/schemas/USERDEFINEDSCREENFIELDVALUELIST"
+            },
+            "CREATEDDATE": {
+               "$ref": "#/components/schemas/DATETIME"
+            },
+            "CREATEDBY": {
+               "$ref": "#/components/schemas/USERID_Type"
+            },
+            "DATEUPDATED": {
+               "$ref": "#/components/schemas/DATETIME"
+            },
+            "UPDATEDBY": {
+               "$ref": "#/components/schemas/USERID_Type"
+            },
+            "recordid": {
+               "type":"number"
+            }
+         }
+      },
+      "USERDEFINEDSCREENFIELDDATA_Type": {
+         "type": "object",
+         "properties": {
+            "TEXTDATA": {
+               "type":"string"
+            },
+            "NUMERICDATA": {
+               "$ref": "#/components/schemas/AMOUNT"
+            },
+            "DATETIMEDATA": {
+               "$ref": "#/components/schemas/DATETIME"
+            }
+         }
+      },
+      "AMOUNT": {
+         "type": "object",
+         "required": ["VALUE","NUMOFDEC","SIGN","CURRENCY","DRCR"], 
+         "properties": {
+            "VALUE": {
+               "type":"number"
+            },
+            "NUMOFDEC": {
+               "type":"number"
+            },
+            "SIGN": {
+               "type":"string"
+            },
+            "CURRENCY": {
+               "type":"string"
+            },
+            "DRCR": {
+               "type":"string"
+            },
+            "qualifier": {
+               "type":"string"
+            },
+            "type": {
+               "type":"string"
+            },
+            "index": {
+               "type":"string"
+            }
+         }
+      },
+      "DATETIME": {
+         "type": "object",
+         "required": ["YEAR","MONTH","DAY","HOUR","MINUTE","SECOND","SUBSECOND","TIMEZONE"], 
+         "properties": {
+            "YEAR": {
+               "type":"number","format":"utc-millisec"
+            },
+            "MONTH": {
+               "type":"number"
+            },
+            "DAY": {
+               "type":"number"
+            },
+            "HOUR": {
+               "type":"number"
+            },
+            "MINUTE": {
+               "type":"number"
+            },
+            "SECOND": {
+               "type":"number"
+            },
+            "SUBSECOND": {
+               "type":"number"
+            },
+            "TIMEZONE": {
+               "type":"string"
+            },
+            "qualifier": {
+               "type":"string","enum":["ACCOUNTING","ACTEND","ACTSTART","APPREQ","APPROVAL","AVAILABLE","BKTEND","BKTSTART","CANCEL","CHANGEDATE","COMPDATE","CONSUME","CREATION","CUMULATIVE","DELIVACT","DELIVSCHED","DISCNT","DOCUMENT","DUE","EARLSTEFF","EARLSTSHIP","EFFECTIVE","ENGCHG","EXECFINISH","EXECSTART","EXPIRATION","FAILDATE","FORECASTF","FORECASTS","FROM","GENERATION","JOBDUE","IMPL","INVOICE","LABORFINSH","LABORSTART","LASTUSED","LOADING","MATCHING","MSMENTDATE","NEEDDELV","OPFINISH","OPSTART","PAYEND","PLANEND","PLANSTART","PO","PROMDELV","PROMSHIP","PYMTTERM","RECEIVED","REPORTDATE","REPORTNGFN","REPORTNGST","REQUIRED","RESORCDWNF","RESORCDWNS","RSPDDATE","RSPDOCGEN","SCHEND","SCHSTART","SETUPFINSH","SETUPSTART","SHIP","SHIPSCHED","STATUSDATE","TEARDOWNF","TEARDOWNS","TO","OTHER"]
+            }
+         }
+      },
+      "USERDEFINEDSCREENFIELDVALUELIST": {
+         "type": "object",
+         "required": ["USERDEFINEDSCREENFIELDVALUEPAIR"], 
+         "properties": {
+            "USERDEFINEDSCREENFIELDVALUEPAIR": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/USERDEFINEDSCREENFIELDVALUEPAIR"
+               }
+            }
+         }
+      },
+      "USERDEFINEDSCREENFIELDVALUEPAIR": {
+         "type": "object",
+         "properties": {
+            "USERDEFINEDSCREENFIELDNAME": {
+               "type":"string"
+            },
+            "USERDEFINEDSCREENFIELDVALUE": {
+               "$ref": "#/components/schemas/USERDEFINEDSCREENFIELDDATA_Type"
+            }
+         }
+      },
+      "USERID_Type": {
+         "type": "object",
+         "required": ["USERCODE"], 
+         "properties": {
+            "USERCODE": {
+               "type":"string"
+            },
+            "DESCRIPTION": {
+               "type":"string"
+            }
+         }
+      },
+      "ALERT_Type": {
+        "type": "object",
+         "properties": {
+            "Message": {
+               "type":"string"
+            },
+            "Name": {
+               "type":"string"
+            }
+         }
+      },
+      "ProcessResponse": {
+        "type": "object",
+         "properties": {
+            "Result": {
+               "$ref": "#/components/schemas/ProcessResult"
+            },
+            "ConfirmationAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "ErrorAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+                } 
+            }
+         }
+      },
+      "ProcessResult": {
+         "type": "object",
+         "properties": {
+            "SessionID": {
+               "type":"string"
+            },
+            "ResultData": {
+               "$ref": "#/components/schemas/ProcessResultData"
+            },
+            "InfoAlert": {
+               "$ref": "#/components/schemas/ALERT_Type"
+            },
+            "WarningAlert": {
+               "type":"array",
+               "items": {
+                  "$ref": "#/components/schemas/ALERT_Type"
+               }
+            }
+         }
+      },
+      "ProcessResultData": {
+         "type": "object",
+         "properties": {
+            "UserDefinedScreenService": {
+                  "$ref": "#/components/schemas/UserDefinedScreenService"
+            }
+         }
+      }
+    },
+    "requestBodies": {
+      "UserDefinedScreenService": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserDefinedScreenService"
+             }
+           }
+        },
+        "required": true
+      }
+    },
+    "securitySchemes": {
+      "basicAuth": {
+         "type": "http",
+         "scheme": "basic"
+      },
+      "apiKey": {
+         "type": "apiKey",
+         "in": "header",
+         "name": "X-API-Key"
+      },
+      "bearerAuth": {
+         "type": "http",
+         "scheme": "bearer",
+         "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "basicAuth": [] 
+    },
+    {
+      "apiKey": [] 
+    },
+    {
+      "bearerAuth": [] 
+    }
+  ]
+}

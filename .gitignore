@@ -1,0 +1,48 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment variables (NEVER commit these!)
+.env
+.env.*
+!.env.example
+.env.local
+.env.production
+
+# Backend
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/logs
+backend/dist
+backend/node_modules
+
+# Database
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/dev.db
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+Thumbs.db
+.DS_Store
