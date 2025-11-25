@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **⚠️ CRITICAL: Before making any changes to this codebase, read these standards:**
+>
+> 📖 **[Documentation Standards](./docs/DOCUMENTATION_STANDARDS.md)** - How we document and commit code
+> - When to commit (before major changes, after functionality works)
+> - README.md maintenance (must always reflect current functionality)
+> - Git/GitHub best practices (commit messages, branch naming, PR templates)
+>
+> 💻 **[Coding Standards](./docs/CODING_STANDARDS.md)** - How we write enterprise-grade code
+> - TypeScript strict mode, no `any`, explicit return types
+> - 20-line function rule
+> - React patterns (functional components, hooks, performance)
+> - Backend patterns (service layer, error handling, validation)
+> - Security practices (input validation, secrets management)
+>
+> **All agents and development sessions MUST follow these standards.**
+
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
@@ -12,6 +28,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. [Common Tasks](#common-tasks)
 7. [Known Issues](#known-issues)
 8. [Production Checklist](#production-checklist)
+9. [Git & GitHub Best Practices](#git--github-best-practices)
+10. [Temporal Files, Scripts & Test Organization](#temporal-files-scripts--test-organization)
 
 ## Quick Start
 
@@ -574,6 +592,138 @@ const response = await fetch('/api/pems/sync', {
 - Data filtering uses actual organization code from database records
 - Supports multi-organization scenarios (e.g., RIO, HOLNG separate projects)
 
+### Database Architecture & Storage Strategy
+
+**Scale Requirements**:
+- **Current**: 1M+ PFA records across all organizations
+- **Growth**: Continuously growing dataset
+- **Performance**: Sub-100ms query response times
+- **Bi-directional**: Read from PEMS + Write updates back
+- **AI Integration**: Fast queries for AI assistant actions
+
+**Recommended: 3-Tier Hybrid Architecture**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 1: PostgreSQL Database (Source of Truth)             │
+│  - Store ALL PFA records with proper indexing              │
+│  - Track change state: pristine vs. modified vs. pending    │
+│  - Composite index on (organizationId, updatedAt)           │
+│  - Partial index on (organizationId WHERE modified=true)    │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 2: Redis Cache (Hot Data Layer) - PLANNED            │
+│  - Cache active org data (TTL: 15 min)                      │
+│  - Cache AI query results (TTL: 5 min)                      │
+│  - Cache modified records (no TTL until sync)               │
+│  Key pattern: pfa:{orgId}:records, pfa:{orgId}:modified     │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 3: React State (Active Session)                      │
+│  - Load only visible records (~800-1000)                    │
+│  - Sandbox pattern for uncommitted changes                  │
+│  - Virtual scrolling for 20K+ record views                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Change Tracking for Bi-directional Sync**:
+
+The `PfaRecord` model includes fields to track local modifications and sync state:
+
+```prisma
+model PfaRecord {
+  // ... existing fields ...
+
+  // Change Tracking (for bi-directional sync)
+  syncState         String    @default("pristine") // pristine, modified, pending_sync, sync_error
+  lastSyncedAt      DateTime? // When last pushed to PEMS
+  pemsVersion       String?   // PEMS lastModified timestamp (for conflict detection)
+  localVersion      Int       @default(1) // Increment on every local edit
+
+  // Modified Fields Tracking (for incremental sync)
+  modifiedFields    String?   // JSON array: ["forecastStart", "forecastEnd"]
+  modifiedBy        String?   // User ID who made local changes
+  modifiedAt        DateTime? // When local changes were made
+
+  // Sync Error Handling
+  syncErrorMessage  String?
+  syncRetryCount    Int       @default(0)
+
+  @@index([organizationId, syncState]) // Fast query for pending changes
+  @@index([organizationId, modifiedAt]) // Recent changes for incremental sync
+}
+```
+
+**Sync State Machine**:
+
+```
+PEMS (Read) → pristine → User Edit → modified → Sync to PEMS → pending_sync → Success/Error
+                ↑                                                                    ↓
+                └────────────────────── Success ─────────────────────────────────────┘
+                                                      ↓
+                                                  sync_error (retry up to 3x)
+```
+
+**Performance Optimizations**:
+
+1. **Database Indexing**:
+   ```sql
+   -- Composite indexes for fast filtering
+   CREATE INDEX idx_pfa_org_category_source
+     ON pfa_records(organizationId, category, source)
+     WHERE isDiscontinued = false;
+
+   -- Date range queries
+   CREATE INDEX idx_pfa_org_dates
+     ON pfa_records(organizationId, forecastStart, forecastEnd);
+
+   -- Modified records (for write sync)
+   CREATE INDEX idx_pfa_modified_pending
+     ON pfa_records(organizationId, syncState)
+     WHERE syncState IN ('modified', 'pending_sync');
+   ```
+
+2. **Pagination + Virtual Scrolling**: Frontend loads only visible records (~1000) with backend API pagination
+
+3. **Redis Caching** (Planned):
+   - Active organization data cached for 15 minutes
+   - AI query results cached for 5 minutes
+   - Modified records tracked in Redis set (no TTL until synced)
+
+**Query Performance Estimates** (with proper indexing):
+- Filter by org + category + source: **< 50ms**
+- Get modified records for sync: **< 20ms**
+- AI query with 3 filters: **< 100ms**
+- Full-text search: **< 200ms** (with GIN index)
+
+**Storage Estimates**:
+- PostgreSQL: ~500 bytes/record × 1M = **500 MB**
+- Redis cache: 10 active orgs × 50K records × 500 bytes = **250 MB**
+- Total: **< 1 GB** (manageable)
+
+**Bi-directional Sync Implementation**:
+
+**Read from PEMS** (Current - Working):
+- Fetch pages of 10,000 records from PEMS Grid Data API
+- Upsert to database in batches of 1,000
+- Skip overwriting locally modified fields (check `syncState`)
+- Track PEMS version (`pemsVersion` field) for conflict detection
+
+**Write to PEMS** (Planned - Not Yet Implemented):
+- Query records with `syncState IN ('modified', 'sync_error')`
+- Map local changes to PEMS Grid Data format
+- POST updates to PEMS Write API
+- On success: Update `syncState` to 'pristine', set `lastSyncedAt`
+- On error: Update `syncState` to 'sync_error', increment `syncRetryCount`
+- Max 3 retries before requiring manual intervention
+
+**Related Service Files**:
+- `backend/src/services/pems/PemsSyncService.ts` - Read sync (working)
+- `backend/src/services/pems/PemsWriteService.ts` - Write sync (planned)
+- `backend/src/services/cache/RedisCacheService.ts` - Caching layer (planned)
+
 ### Utility Scripts
 
 **Check Feeds Status**:
@@ -659,6 +809,28 @@ Deletes all PFA records from database before full sync. Useful for testing sync 
 2. Call `onUpdateAssets()` with transformation function
 3. Ensure business rules are enforced (e.g., don't move actual start dates backward)
 4. History is automatically saved via `updatePfaRecords()` wrapper
+
+### Add a New Admin Menu Item
+
+**IMPORTANT**: Admin menu items are in **App.tsx**, NOT AdminDashboard.tsx.
+
+1. **Add icon import** to `App.tsx` line 34 (lucide-react imports)
+2. **Add menu item** in the Administration section (around line 751-758):
+   ```tsx
+   <MenuItem label="Your Feature" icon={YourIcon} active={appMode === 'your-feature'} onClick={() => setAppMode('your-feature')} />
+   ```
+3. **Import component** at top of `App.tsx` (around line 18-30):
+   ```tsx
+   import { YourComponent } from './components/admin/YourComponent';
+   ```
+4. **Add render logic** in main content area (around line 950-960):
+   ```tsx
+   {appMode === 'your-feature' && (
+       <YourComponent />
+   )}
+   ```
+
+Example: See Data Source Mappings implementation (App.tsx:753, 954).
 
 ### Debug Drag-and-Drop Issues
 
@@ -880,6 +1052,215 @@ When implementing UI features, verify:
 - Documentation changes
 - Test file modifications
 - Non-visual utility functions
+
+---
+
+## Git & GitHub Best Practices
+
+> **📖 Full details:** See [DOCUMENTATION_STANDARDS.md](./docs/DOCUMENTATION_STANDARDS.md) Section 11
+
+### When to Commit
+
+**✅ COMMIT NOW:**
+1. **Before major refactoring** - Create safety checkpoint
+2. **After functionality works** - Test locally first
+3. **Documentation updates** - Always commit doc changes
+
+**❌ NEVER COMMIT:**
+- Broken code (unless on `wip/` branch)
+- console.log statements (unless intentional logging)
+- Secrets or API keys
+- node_modules/ or build artifacts
+
+### Commit Message Format
+
+```
+[TYPE] Brief summary (50 chars max) - DEV-XXX
+
+Detailed explanation of what changed and why.
+
+Changes:
+- Specific change 1
+- Specific change 2
+
+Related:
+- Development: [DEV-XXX] status → ON TESTING
+- Testing: [TEST-XXX]
+
+Updated:
+- README.md
+- docs/DEVELOPMENT_LOG.md
+- docs/API.md
+```
+
+**Types:** `[FEAT]`, `[FIX]`, `[REFACTOR]`, `[DOCS]`, `[TEST]`, `[CHORE]`, `[PERF]`, `[SECURITY]`, `[RELEASE]`
+
+### README.md Maintenance
+
+**⚠️ CRITICAL:** README.md must ALWAYS reflect current functionality.
+
+**Update README.md when:**
+- ✅ Adding new features → Update "Current Features"
+- ✅ Version bumps → Update version badge
+- ✅ Production deploys → Update "Last Deploy"
+- ✅ Tech stack changes → Update "Tech Stack"
+
+**Update frequency:** Every commit that adds/changes user-facing functionality
+
+### Commit Workflow
+
+```
+1. Make changes to code
+2. Test functionality locally
+   ├─► Works? ────► Continue
+   └─► Broken? ──► Fix before committing
+
+3. Update documentation
+   ├─► README.md (if functionality changed)
+   ├─► DEVELOPMENT_LOG.md (status update)
+   └─► API.md or COMPONENTS.md (if applicable)
+
+4. Stage changes
+   git add <files>
+
+5. Commit with proper message
+   git commit -m "[TYPE] Description - DEV-XXX"
+
+6. Push to remote
+   git push origin <branch>
+```
+
+### Branch Naming
+
+**Format:** `<type>/<ticket>-<description>`
+
+**Examples:**
+- `feature/DEV-123-pems-sync-ui`
+- `bugfix/DEV-124-timeline-crash`
+- `docs/DEV-126-update-docs`
+
+---
+
+## Temporal Files, Scripts & Test Organization
+
+> **📖 Full details:** See [DOCUMENTATION_STANDARDS.md](./docs/DOCUMENTATION_STANDARDS.md) Section 17
+
+### Temporary File Locations
+
+**AI agents and development sessions** must use the following folder structure for temporary files:
+
+| Type | Location | Pattern | Lifecycle |
+|------|----------|---------|-----------|
+| **Agent Working Files** | `temp/agent-work/` | `*.tmp.md`, `*.wip.md` | Delete after task |
+| **Compilation Results** | `temp/compile/` | `*-summary.md` | Archive after review |
+| **Script Output** | `temp/output/` | `*-results.txt` | Delete after 7 days |
+| **Test Artifacts** | `temp/test/` | `*-test-results.json` | Delete after test run |
+
+**Naming Convention:** `[date]-[purpose]-[status].[ext]`
+
+**Examples:**
+```
+temp/agent-work/2025-11-25-pems-sync-analysis-wip.md
+temp/compile/2025-11-25-component-refactor-complete.md
+temp/output/2025-11-25-sync-results.txt
+temp/test/2025-11-25-integration-test-results.json
+```
+
+**Status Suffixes:**
+- `.wip.md` - Work in progress
+- `.tmp.md` - Temporary, can be deleted anytime
+- `.draft.md` - Draft document for review
+- `.final.md` - Final version ready for archiving
+
+### Script Organization
+
+**Backend Scripts:** `backend/scripts/`
+- Database utilities: `backend/scripts/db/`
+- Sync utilities: `backend/scripts/sync/`
+- Maintenance tasks: `backend/scripts/maintenance/`
+
+**Frontend Scripts:** `frontend/scripts/` (when needed)
+
+**Script Naming Convention:** `[action]-[subject]-[detail].ts`
+
+**Examples:**
+```
+backend/scripts/db/check-feeds.ts
+backend/scripts/db/update-feeds.ts
+backend/scripts/db/clear-pfa-data.ts
+backend/scripts/db/verify-orgs.ts
+backend/scripts/sync/test-pems-connection.ts
+backend/scripts/sync/manual-sync-trigger.ts
+```
+
+**Script Categories:**
+- **Diagnostic** (`check-*.ts`) - Inspect current system state
+- **Update** (`update-*.ts`) - Modify data or configuration
+- **Cleanup** (`clear-*.ts`, `cleanup-*.ts`) - Delete or clean data
+- **Verification** (`verify-*.ts`) - Validate data integrity
+- **Testing** (`test-*.ts`) - Manual test utilities
+
+### Script Documentation Requirements
+
+**Every script folder must have a README.md** that explains:
+1. Available scripts
+2. Purpose of each script
+3. Usage examples
+4. When to use each script
+5. Dependencies and prerequisites
+
+See `backend/scripts/README.md` for template.
+
+### Test Organization
+
+**Test Structure:**
+```
+tests/
+├── README.md                    # Test suite index
+├── setup/                       # Test setup files
+├── unit/                        # Unit tests
+│   ├── backend/
+│   │   ├── services/
+│   │   └── utils/
+│   └── frontend/
+│       ├── components/
+│       └── utils/
+├── integration/                 # Integration tests
+├── e2e/                         # End-to-end tests
+└── __mocks__/                   # Mock implementations
+```
+
+**Test Naming Convention:** `[subject].[type].test.ts`
+
+**Examples:**
+```
+tests/unit/backend/utils/calculateCost.unit.test.ts
+tests/unit/frontend/utils/aggregateCosts.unit.test.ts
+tests/integration/backend/pems-api.integration.test.ts
+tests/e2e/sync-workflow.e2e.test.ts
+```
+
+### Quick Reference for AI Agents
+
+**When creating temporary files:**
+1. ✅ Use `temp/agent-work/` folder
+2. ✅ Use date-purpose-status naming pattern
+3. ✅ Clean up `.tmp.md` and `.wip.md` files after task completion
+4. ✅ Archive `.final.md` files to `docs/archive/YYYY-MM/` if needed
+
+**When creating utility scripts:**
+1. ✅ Place in appropriate `backend/scripts/` subfolder
+2. ✅ Use action-subject-detail naming pattern
+3. ✅ Add JSDoc header with @file, @description, @usage
+4. ✅ Update folder README.md with script documentation
+5. ✅ Include error handling and proper logging
+
+**When creating tests:**
+1. ✅ Place in appropriate `tests/` subfolder
+2. ✅ Use subject.type.test.ts naming pattern
+3. ✅ Update tests/README.md with test documentation
+
+---
 
 ## Environment Setup
 
