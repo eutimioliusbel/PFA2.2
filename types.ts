@@ -10,10 +10,10 @@ export interface PfaRecord {
   category: string; // PFS_A_CATEGORY
   forecastCategory?: string; // PFS_F_CATEGORY
   class: string; // PFS_F_CLASS
-  
+
   source: 'Purchase' | 'Rental'; // PFS_A_SOURCE
   dor: 'BEO' | 'PROJECT'; // PFS_A_DOR
-  
+
   // Status Flags
   isActualized: boolean; // PFA_ACT
   isDiscontinued: boolean; // PFA_DIS
@@ -22,15 +22,15 @@ export interface PfaRecord {
   // Financials
   monthlyRate: number; // PFS_A_RATE (Used if Rental)
   purchasePrice: number; // PFS_A_PRICE (Used if Purchase)
-  
+
   manufacturer: string; // PFS_F_MANUFACT
   model: string; // PFS_F_MODEL
-  
+
   // Original Plan (Baseline)
   originalStart: Date;
   originalEnd: Date;
-  hasPlan?: boolean; 
-  
+  hasPlan?: boolean;
+
   // Forecast Plan (Editable)
   forecastStart: Date;
   forecastEnd: Date;
@@ -41,6 +41,13 @@ export interface PfaRecord {
   hasActuals: boolean;
   contract?: string;
   equipment?: string; // Link to AssetMasterRecord via Asset Tag
+
+  // Sync State (Phase 3 - Mirror + Delta Architecture)
+  syncState?: 'pristine' | 'modified' | 'pending_sync' | 'sync_error' | 'committed';
+  lastSyncedAt?: Date;
+  modifiedFields?: string[];
+  modifiedBy?: string;
+  modifiedAt?: Date;
 }
 
 // Alias for backward compatibility
@@ -333,4 +340,113 @@ export type DataCategory =
 export interface DataExchangeConfig {
     // Map each category to its field definitions
     fields: Record<DataCategory, FieldDefinition[]>;
+}
+
+// --- PHASE 3 API TYPES ---
+
+export interface PfaFilters {
+  category?: string;
+  class?: string;
+  dor?: 'BEO' | 'PROJECT';
+  source?: 'Rental' | 'Purchase';
+  forecastStartFrom?: string;
+  forecastStartTo?: string;
+  forecastEndFrom?: string;
+  forecastEndTo?: string;
+  isActualized?: boolean;
+  isDiscontinued?: boolean;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface PfaPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PfaSyncState {
+  pristineCount: number;
+  modifiedCount: number;
+  pendingSyncCount: number;
+  committedCount?: number;
+  errorCount?: number;
+}
+
+export interface PfaDataResponse {
+  success: boolean;
+  data: PfaRecord[];
+  pagination: PfaPagination;
+  syncState: PfaSyncState;
+}
+
+export interface PfaModification {
+  pfaId: string;
+  changes: Partial<PfaRecord>;
+}
+
+export interface SaveDraftRequest {
+  sessionId: string;
+  modifications: PfaModification[];
+}
+
+export interface SaveDraftResponse {
+  success: boolean;
+  saved: number;
+  sessionId: string;
+  message?: string;
+}
+
+export interface CommitDraftRequest {
+  sessionId?: string;
+  pfaIds?: string[];
+}
+
+export interface CommitDraftResponse {
+  success: boolean;
+  committed: number;
+  message: string;
+}
+
+export interface DiscardDraftRequest {
+  sessionId?: string;
+  pfaIds?: string[];
+}
+
+export interface DiscardDraftResponse {
+  success: boolean;
+  discarded: number;
+  message?: string;
+}
+
+export interface CategoryStats {
+  count: number;
+  totalCost: number;
+  planCost: number;
+  forecastCost: number;
+  actualCost: number;
+}
+
+export interface SourceStats {
+  count: number;
+  totalCost: number;
+}
+
+export interface PfaStatsResponse {
+  success: boolean;
+  stats: {
+    totalRecords: number;
+    totalPlanCost: number;
+    totalForecastCost: number;
+    totalActualCost: number;
+    variance: {
+      planVsForecast: number;
+      planVsActual: number;
+    };
+    byCategory: Record<string, CategoryStats>;
+    bySource: Record<string, SourceStats>;
+  };
 }

@@ -29,6 +29,7 @@ import { PfaMasterView } from './components/admin/PfaMasterView';
 import { GenericMasterView } from './components/admin/GenericMasterView';
 import { AiUsageLogsView } from './components/admin/AiUsageLogsView';
 import { SyncLogsView } from './components/admin/SyncLogsView';
+import { SyncStatusBanner } from './components/SyncStatusBanner';
 
 import { User, Organization, PfaRecord, FilterState, Scale, SeriesVisibility, DisplayMetric, GridColumn, ColorConfig, DataExchangeConfig, ApiConfig, SystemConfig, AssetMasterRecord, ClassificationRecord, DataCategory, DorRecord, SourceRecord, ManufacturerRecord, ModelRecord } from './types';
 import { STATIC_PFA_RECORDS, STATIC_ASSET_MASTER, STATIC_CLASSIFICATION, STATIC_DORS, STATIC_SOURCES, STATIC_MANUFACTURERS, STATIC_MODELS } from './mockData';
@@ -184,7 +185,7 @@ const App: React.FC = () => {
   const [aiMode, setAiMode] = useState<'hidden' | 'panel' | 'voice'>('hidden');
 
   // --- Data State ---
-  // Using PfaRecord type
+  // Phase 4: API-backed state (replaces mockData.ts)
   const allPfaRef = useRef<PfaRecord[]>([]);
   const baselinePfaRef = useRef<PfaRecord[]>([]);
   const [visiblePfaRecords, setVisiblePfaRecords] = useState<PfaRecord[]>([]);
@@ -193,6 +194,13 @@ const App: React.FC = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
+
+  // Phase 4: API Integration State
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState({ pristineCount: 0, modifiedCount: 0, pendingSyncCount: 0 });
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const [pendingModifications, setPendingModifications] = useState<Map<string, Partial<PfaRecord>>>(new Map());
 
   // --- Admin / Meta Data State ---
   const [users, setUsers] = useState<User[]>([]);
@@ -240,18 +248,13 @@ const App: React.FC = () => {
 
   // --- Initialization ---
   useEffect(() => {
-      // Load STATIC Master Data
-      allPfaRef.current = cloneAssets(STATIC_PFA_RECORDS); // Initial Load
-      baselinePfaRef.current = cloneAssets(STATIC_PFA_RECORDS);
-
+      // Load STATIC Master Data (still using mockData for master data tables)
       setAssetMasterData(STATIC_ASSET_MASTER);
       setClassificationData(STATIC_CLASSIFICATION);
       setDorData(STATIC_DORS);
       setSourceData(STATIC_SOURCES);
       setManufacturerData(STATIC_MANUFACTURERS);
       setModelData(STATIC_MODELS);
-
-      setDataVersion(v => v + 1);
   }, []);
 
   // --- Fetch Users and Organizations from API ---
@@ -273,6 +276,79 @@ const App: React.FC = () => {
 
     fetchUsersAndOrgs();
   }, []);
+
+  // --- Phase 4: Load PFA Data from API ---
+  const loadPfaData = useCallback(async (orgId: string) => {
+    if (!orgId) return;
+
+    setIsLoadingData(true);
+    setDataError(null);
+
+    try {
+      // Convert FilterState to API filters format
+      const currentFilters = orgSpecificFilters[orgId];
+      const apiFilters = currentFilters ? {
+        category: currentFilters.category.length > 0 ? currentFilters.category : undefined,
+        class: currentFilters.classType.length > 0 ? currentFilters.classType : undefined,
+        dor: currentFilters.dor.length > 0 ? currentFilters.dor : undefined,
+        source: currentFilters.source.length > 0 ? currentFilters.source : undefined,
+        forecastStartFrom: currentFilters.startDateFrom,
+        forecastStartTo: currentFilters.startDateTo,
+        forecastEndFrom: currentFilters.endDateFrom,
+        forecastEndTo: currentFilters.endDateTo,
+        pageSize: 5000, // Load more records than the old 800 limit
+        sortBy: 'forecastStart',
+        sortOrder: 'asc' as const
+      } : {
+        pageSize: 5000,
+        sortBy: 'forecastStart',
+        sortOrder: 'asc' as const
+      };
+
+      const response = await apiClient.getPfaData(orgId, apiFilters);
+
+      if (response.success) {
+        // Convert date strings to Date objects
+        const records = response.data.map((record: any) => ({
+          ...record,
+          originalStart: new Date(record.originalStart),
+          originalEnd: new Date(record.originalEnd),
+          forecastStart: new Date(record.forecastStart),
+          forecastEnd: new Date(record.forecastEnd),
+          actualStart: new Date(record.actualStart),
+          actualEnd: new Date(record.actualEnd),
+          lastSyncedAt: record.lastSyncedAt ? new Date(record.lastSyncedAt) : undefined,
+          modifiedAt: record.modifiedAt ? new Date(record.modifiedAt) : undefined
+        }));
+
+        allPfaRef.current = records;
+        baselinePfaRef.current = cloneAssets(records);
+        setSyncState(response.syncState);
+        setDataVersion(v => v + 1);
+        setHasUnsavedChanges(false);
+      } else {
+        throw new Error('Failed to load PFA data');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load PFA data';
+      setDataError(errorMessage);
+      console.error('Load PFA data error:', error);
+
+      // Fallback to empty data if API fails
+      allPfaRef.current = [];
+      baselinePfaRef.current = [];
+      setDataVersion(v => v + 1);
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [orgSpecificFilters]);
+
+  // Load data when organization changes
+  useEffect(() => {
+    if (currentUser?.organizationId) {
+      loadPfaData(currentUser.organizationId);
+    }
+  }, [currentUser?.organizationId, loadPfaData]);
 
   // --- Derived Master Data for Filters ---
   // Instead of static CATEGORIES constant, we derive from Classification Master
@@ -609,15 +685,141 @@ const App: React.FC = () => {
       }, 100);
   };
 
-  const pushHistory = () => { historyRef.current = [...historyRef.current, cloneAssets(allPfaRef.current)]; if (historyRef.current.length > 20) historyRef.current.shift(); futureRef.current = []; setCanUndo(true); setCanRedo(false); setHasUnsavedChanges(true); };
-  const updatePfaRecords = (fn: (assets: PfaRecord[]) => PfaRecord[]) => { pushHistory(); allPfaRef.current = fn(allPfaRef.current); setDataVersion(v => v + 1); };
+  // --- Phase 4: Draft Management (replaces undo/redo) ---
+  const cloneAssets = (assets: PfaRecord[]): PfaRecord[] => JSON.parse(JSON.stringify(assets));
+
+  // Track modifications locally before saving
+  const updatePfaRecords = (fn: (assets: PfaRecord[]) => PfaRecord[]) => {
+    const before = allPfaRef.current;
+    const after = fn(allPfaRef.current);
+
+    // Track which records changed
+    const modifiedRecords = new Map(pendingModifications);
+    after.forEach((record) => {
+      const originalRecord = baselinePfaRef.current.find(r => r.id === record.id);
+      if (originalRecord && JSON.stringify(record) !== JSON.stringify(originalRecord)) {
+        // Extract only the changed fields
+        const changes: Partial<PfaRecord> = {};
+        Object.keys(record).forEach((key) => {
+          const k = key as keyof PfaRecord;
+          if (JSON.stringify(record[k]) !== JSON.stringify(originalRecord[k])) {
+            changes[k] = record[k] as any;
+          }
+        });
+        modifiedRecords.set(record.pfaId, changes);
+      }
+    });
+
+    setPendingModifications(modifiedRecords);
+    allPfaRef.current = after;
+    setDataVersion(v => v + 1);
+    setHasUnsavedChanges(modifiedRecords.size > 0);
+  };
+
   const handleBulkUpdate = (updates: Partial<PfaRecord>[]) => { updatePfaRecords(prev => { const updateMap = new Map(updates.map(u => [u.id!, u])); return prev.map(asset => { const update = updateMap.get(asset.id); return update ? { ...asset, ...update } : asset; }); }); };
   const handleUpdateAsset = (id: string, start: Date, end: Date, layer: 'forecast'|'actual') => { updatePfaRecords(prev => prev.map(a => a.id === id ? (layer === 'actual' ? {...a, actualStart: start, actualEnd: end, hasActuals: true} : {...a, forecastStart: start, forecastEnd: end}) : a)); };
   const handleUpdateAssets = (updates: {id: string, start: Date, end: Date, layer: 'forecast'|'actual'}[]) => { updatePfaRecords(prev => { const map = new Map(updates.map(u => [u.id, u])); return prev.map(a => { const u = map.get(a.id); return u ? (u.layer === 'actual' ? {...a, actualStart: u.start, actualEnd: u.end, hasActuals: true} : {...a, forecastStart: u.start, forecastEnd: u.end}) : a; }); }); };
-  const handleUndo = () => { if (!historyRef.current.length) return; futureRef.current = [allPfaRef.current, ...futureRef.current]; allPfaRef.current = historyRef.current.pop()!; setCanUndo(historyRef.current.length > 0); setCanRedo(true); setDataVersion(v => v + 1); };
-  const handleRedo = () => { if (!futureRef.current.length) return; historyRef.current = [...historyRef.current, allPfaRef.current]; allPfaRef.current = futureRef.current.shift()!; setCanUndo(true); setCanRedo(futureRef.current.length > 0); setDataVersion(v => v + 1); };
-  const handleDiscardChanges = () => { if (window.confirm("Are you sure you want to discard all changes and revert to the baseline?")) { const restoredData = cloneAssets(baselinePfaRef.current); allPfaRef.current = restoredData; historyRef.current = []; futureRef.current = []; setHasUnsavedChanges(false); setCanUndo(false); setCanRedo(false); setSelectedIds(new Set()); setDragOverrides(null); setDataVersion(v => v + 1); setRemountKey(k => k + 1); } };
-  const handleSubmitChanges = async () => { setIsSubmitting(true); setLoadingMessage("Saving changes..."); await new Promise(resolve => setTimeout(resolve, 1200)); baselinePfaRef.current = cloneAssets(allPfaRef.current); setHasUnsavedChanges(false); setDataVersion(v=>v+1); historyRef.current = []; futureRef.current = []; setCanUndo(false); setCanRedo(false); setIsSubmitting(false); setLoadingMessage(null); };
+
+  // Save draft modifications to database
+  const handleSaveDraft = async () => {
+    if (!currentUser?.organizationId || pendingModifications.size === 0) return;
+
+    setIsSubmitting(true);
+    setLoadingMessage("Saving draft...");
+
+    try {
+      const modifications = Array.from(pendingModifications.entries()).map(([pfaId, changes]) => ({
+        pfaId,
+        changes
+      }));
+
+      const response = await apiClient.saveDraft(
+        currentUser.organizationId,
+        sessionId,
+        modifications
+      );
+
+      if (response.success) {
+        setLoadingMessage(`Saved ${response.saved} draft changes`);
+        // Reload data to get updated sync state
+        await loadPfaData(currentUser.organizationId);
+        setPendingModifications(new Map());
+        setTimeout(() => setLoadingMessage(null), 2000);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save draft';
+      setLoadingMessage(`Error: ${errorMessage}`);
+      setTimeout(() => setLoadingMessage(null), 3000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Commit draft modifications
+  const handleSubmitChanges = async () => {
+    if (!currentUser?.organizationId) return;
+
+    if (!window.confirm("Commit all draft changes? This will make them permanent and ready for sync to PEMS.")) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLoadingMessage("Committing changes...");
+
+    try {
+      const response = await apiClient.commitDrafts(currentUser.organizationId, { sessionId });
+
+      if (response.success) {
+        setLoadingMessage(`Committed ${response.committed} changes`);
+        // Reload data to reflect committed state
+        await loadPfaData(currentUser.organizationId);
+        baselinePfaRef.current = cloneAssets(allPfaRef.current);
+        setHasUnsavedChanges(false);
+        setPendingModifications(new Map());
+        setTimeout(() => setLoadingMessage(null), 2000);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to commit changes';
+      setLoadingMessage(`Error: ${errorMessage}`);
+      setTimeout(() => setLoadingMessage(null), 3000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Discard draft modifications
+  const handleDiscardChanges = async () => {
+    if (!currentUser?.organizationId) return;
+
+    if (!window.confirm("Discard all draft changes and revert to synced data?")) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLoadingMessage("Discarding drafts...");
+
+    try {
+      const response = await apiClient.discardDrafts(currentUser.organizationId, { sessionId });
+
+      if (response.success) {
+        setLoadingMessage(`Discarded ${response.discarded} draft changes`);
+        // Reload data to get pristine state
+        await loadPfaData(currentUser.organizationId);
+        setHasUnsavedChanges(false);
+        setPendingModifications(new Map());
+        setSelectedIds(new Set());
+        setDragOverrides(null);
+        setRemountKey(k => k + 1);
+        setTimeout(() => setLoadingMessage(null), 2000);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to discard drafts';
+      setLoadingMessage(`Error: ${errorMessage}`);
+      setTimeout(() => setLoadingMessage(null), 3000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   // Logout handler
   const handleLogout = () => {
     authLogout();
@@ -814,6 +1016,15 @@ const App: React.FC = () => {
                 hideSettings={['pfa-master', 'asset-master', 'class-master', 'dor-master', 'source-master', 'manufacturer-master', 'model-master', 'ai-usage-logs', 'sync-logs'].includes(appMode)}
             />
 
+            {/* Phase 4: Sync Status Banner */}
+            {isLabView && (
+                <SyncStatusBanner
+                    syncState={syncState}
+                    onRefresh={() => currentUser?.organizationId && loadPfaData(currentUser.organizationId)}
+                    isLoading={isLoadingData}
+                />
+            )}
+
             <AiAssistant 
                 mode={aiMode}
                 onClose={() => setAiMode('hidden')}
@@ -876,7 +1087,39 @@ const App: React.FC = () => {
                 )}
 
                 <div className={isLabView ? "flex-1 h-full p-2 pl-0 overflow-hidden relative flex flex-col" : "flex-1 h-full p-6 overflow-y-auto custom-scrollbar bg-slate-50 dark:bg-slate-950"} key={remountKey}>
-                    {appMode === 'timeline-lab' && (
+                    {/* Phase 4: Loading State */}
+                    {isLoadingData && (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="flex flex-col items-center gap-4">
+                                <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                                <p className="text-slate-600 dark:text-slate-400 font-medium">Loading PFA data...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Phase 4: Error State */}
+                    {!isLoadingData && dataError && (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="max-w-md w-full p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400 flex-none mt-0.5" />
+                                    <div className="flex-1">
+                                        <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">Failed to Load Data</h3>
+                                        <p className="text-red-700 dark:text-red-300 mb-4">{dataError}</p>
+                                        <button
+                                            onClick={() => currentUser?.organizationId && loadPfaData(currentUser.organizationId)}
+                                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors font-medium"
+                                        >
+                                            Retry
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Main Content (only show if not loading and no error) */}
+                    {!isLoadingData && !dataError && appMode === 'timeline-lab' && (
                         <TimelineLab 
                             pfaRecords={visiblePfaRecords} 
                             onUpdateAsset={handleUpdateAsset} onUpdateAssets={handleUpdateAssets}
@@ -892,7 +1135,8 @@ const App: React.FC = () => {
                             assetMaster={assetMasterData} classificationData={classificationData}
                         />
                     )}
-                    {appMode === 'matrix-lab' && (
+
+                    {!isLoadingData && !dataError && appMode === 'matrix-lab' && (
                         <TimelineLab 
                             pfaRecords={visiblePfaRecords} 
                             onUpdateAsset={handleUpdateAsset} onUpdateAssets={handleUpdateAssets}
@@ -908,8 +1152,9 @@ const App: React.FC = () => {
                             assetMaster={assetMasterData} classificationData={classificationData}
                         />
                     )}
+
                     {/* PFA 1.0 Lab - Forces Quantity Matrix View */}
-                    {appMode === 'pfa-1.0-lab' && (
+                    {!isLoadingData && !dataError && appMode === 'pfa-1.0-lab' && (
                         <TimelineLab 
                             pfaRecords={visiblePfaRecords} 
                             onUpdateAsset={handleUpdateAsset} onUpdateAssets={handleUpdateAssets}
@@ -929,7 +1174,8 @@ const App: React.FC = () => {
                             assetMaster={assetMasterData} classificationData={classificationData}
                         />
                     )}
-                    {appMode === 'grid-lab' && (
+
+                    {!isLoadingData && !dataError && appMode === 'grid-lab' && (
                         <GridLab 
                             assets={visiblePfaRecords} 
                             selectedIds={selectedIds} 
@@ -1032,33 +1278,25 @@ const App: React.FC = () => {
 
                 {isLabView && (
                     <div className="fixed bottom-8 right-6 z-50 flex flex-col gap-4 items-center">
-                        {(hasUnsavedChanges || canUndo) && (
+                        {hasUnsavedChanges && (
                             <div className="flex flex-col gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 pb-2 items-center">
-                                <button 
-                                    onClick={handleUndo} 
-                                    disabled={!canUndo || isSubmitting} 
-                                    className="w-12 h-12 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center transition-all transform hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed" 
-                                    title="Undo"
+                                <button
+                                    onClick={handleSaveDraft}
+                                    disabled={isSubmitting || pendingModifications.size === 0}
+                                    className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 shadow-xl border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 flex items-center justify-center transition-all transform hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title="Save Draft"
                                 >
-                                    <Undo2 className="w-5 h-5" />
+                                    <Save className="w-5 h-5" />
                                 </button>
-                                <button 
-                                    onClick={handleRedo} 
-                                    disabled={!canRedo || isSubmitting} 
-                                    className="w-12 h-12 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-center transition-all transform hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed" 
-                                    title="Redo"
-                                >
-                                    <Redo2 className="w-5 h-5" />
-                                </button>
-                                <button 
-                                    onClick={handleDiscardChanges} 
+                                <button
+                                    onClick={handleDiscardChanges}
                                     disabled={isSubmitting}
-                                    className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 shadow-xl border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 flex items-center justify-center transition-all transform hover:scale-110 disabled:opacity-50" 
-                                    title="Discard All Changes"
+                                    className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 shadow-xl border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 flex items-center justify-center transition-all transform hover:scale-110 disabled:opacity-50"
+                                    title="Discard All Drafts"
                                 >
                                     <Trash2 className="w-5 h-5" />
                                 </button>
-                                <button 
+                                <button
                                     onClick={handleSubmitChanges} 
                                     disabled={isSubmitting}
                                     className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl shadow-emerald-500/30 border border-emerald-400 flex items-center justify-center transition-all transform hover:scale-110 disabled:opacity-70" 

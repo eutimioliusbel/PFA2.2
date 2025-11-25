@@ -618,6 +618,144 @@ class ApiClient {
   }
 
   // ============================================================================
+  // Phase 3: PFA Data API (Mirror + Delta Architecture)
+  // ============================================================================
+
+  /**
+   * Get merged PFA data (mirror + user modifications)
+   * @param orgId Organization ID
+   * @param filters Optional filters for category, class, DOR, source, date ranges, etc.
+   * @returns PfaDataResponse with merged records, pagination, and sync state
+   */
+  async getPfaData(orgId: string, filters?: {
+    category?: string[];
+    class?: string[];
+    dor?: string[];
+    source?: string[];
+    forecastStartFrom?: string;
+    forecastStartTo?: string;
+    forecastEndFrom?: string;
+    forecastEndTo?: string;
+    isActualized?: boolean;
+    isDiscontinued?: boolean;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<any> {
+    const params = new URLSearchParams();
+
+    // Add filters to query params
+    if (filters) {
+      if (filters.category && filters.category.length > 0) {
+        params.append('category', filters.category.join(','));
+      }
+      if (filters.class && filters.class.length > 0) {
+        params.append('class', filters.class.join(','));
+      }
+      if (filters.dor && filters.dor.length > 0) {
+        params.append('dor', filters.dor.join(','));
+      }
+      if (filters.source && filters.source.length > 0) {
+        params.append('source', filters.source.join(','));
+      }
+      if (filters.forecastStartFrom) {
+        params.append('forecastStartFrom', filters.forecastStartFrom);
+      }
+      if (filters.forecastStartTo) {
+        params.append('forecastStartTo', filters.forecastStartTo);
+      }
+      if (filters.forecastEndFrom) {
+        params.append('forecastEndFrom', filters.forecastEndFrom);
+      }
+      if (filters.forecastEndTo) {
+        params.append('forecastEndTo', filters.forecastEndTo);
+      }
+      if (filters.isActualized !== undefined) {
+        params.append('isActualized', String(filters.isActualized));
+      }
+      if (filters.isDiscontinued !== undefined) {
+        params.append('isDiscontinued', String(filters.isDiscontinued));
+      }
+      if (filters.page !== undefined) {
+        params.append('page', String(filters.page));
+      }
+      if (filters.pageSize !== undefined) {
+        params.append('pageSize', String(filters.pageSize));
+      }
+      if (filters.sortBy) {
+        params.append('sortBy', filters.sortBy);
+      }
+      if (filters.sortOrder) {
+        params.append('sortOrder', filters.sortOrder);
+      }
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/api/pfa/${orgId}${queryString ? `?${queryString}` : ''}`;
+
+    return this.request(endpoint);
+  }
+
+  /**
+   * Save draft modifications
+   * @param orgId Organization ID
+   * @param sessionId UUID for grouping related changes
+   * @param modifications Array of PFA modifications
+   * @returns SaveDraftResponse with count of saved records
+   */
+  async saveDraft(orgId: string, sessionId: string, modifications: Array<{
+    pfaId: string;
+    changes: Record<string, any>;
+  }>): Promise<any> {
+    return this.request(`/api/pfa/${orgId}/draft`, {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, modifications })
+    });
+  }
+
+  /**
+   * Commit draft modifications (update syncState to 'committed')
+   * @param orgId Organization ID
+   * @param options Optional sessionId or pfaIds to commit specific records
+   * @returns CommitDraftResponse with count of committed records
+   */
+  async commitDrafts(orgId: string, options?: {
+    sessionId?: string;
+    pfaIds?: string[];
+  }): Promise<any> {
+    return this.request(`/api/pfa/${orgId}/commit`, {
+      method: 'POST',
+      body: JSON.stringify(options || {})
+    });
+  }
+
+  /**
+   * Discard draft modifications
+   * @param orgId Organization ID
+   * @param options Optional sessionId or pfaIds to discard specific records
+   * @returns DiscardDraftResponse with count of discarded records
+   */
+  async discardDrafts(orgId: string, options?: {
+    sessionId?: string;
+    pfaIds?: string[];
+  }): Promise<any> {
+    return this.request(`/api/pfa/${orgId}/discard`, {
+      method: 'POST',
+      body: JSON.stringify(options || {})
+    });
+  }
+
+  /**
+   * Get KPI statistics for organization
+   * @param orgId Organization ID
+   * @returns PfaStatsResponse with totals, variance, and breakdown by category/source
+   */
+  async getStats(orgId: string): Promise<any> {
+    return this.request(`/api/pfa/${orgId}/stats`);
+  }
+
+  // ============================================================================
   // Health Check
   // ============================================================================
 

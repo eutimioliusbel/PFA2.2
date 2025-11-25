@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
 import { globalRateLimiter } from './middleware/rateLimiter';
+import { initializeWorker } from './workers/PemsSyncWorker';
 
 // Routes
 import authRoutes from './routes/authRoutes';
@@ -15,6 +16,8 @@ import logRoutes from './routes/logRoutes';
 import userRoutes from './routes/userRoutes';
 import orgRoutes from './routes/orgRoutes';
 import dataSourceRoutes from './routes/dataSource';
+import syncRoutes from './routes/syncRoutes';
+import pfaDataRoutes from './routes/pfaDataRoutes';
 
 const app = express();
 
@@ -64,6 +67,8 @@ app.use('/api/logs', logRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/organizations', orgRoutes);
 app.use('/api/data-sources', dataSourceRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/pfa', pfaDataRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -88,6 +93,24 @@ const startServer = async () => {
     // Connect to database
     await connectDatabase();
 
+    // Initialize background sync worker
+    const workerEnabled = process.env.ENABLE_SYNC_WORKER === 'true';
+    const syncInterval = process.env.SYNC_INTERVAL || '*/15 * * * *';
+    const syncOrgs = process.env.SYNC_ORGS ? process.env.SYNC_ORGS.split(',').map(s => s.trim()) : [];
+
+    const worker = initializeWorker({
+      enabled: workerEnabled,
+      syncInterval,
+      organizations: syncOrgs
+    });
+
+    if (workerEnabled) {
+      worker.start();
+      logger.info(`[Worker] Background sync worker started (interval: ${syncInterval})`);
+    } else {
+      logger.info('[Worker] Background sync worker disabled');
+    }
+
     // Start server
     app.listen(env.PORT, () => {
       logger.info(`
@@ -98,12 +121,17 @@ const startServer = async () => {
 │   Environment: ${env.NODE_ENV.padEnd(43)}│
 │   Port:        ${env.PORT.toString().padEnd(43)}│
 │   Database:    Connected ✓                                │
+│   Sync Worker: ${(workerEnabled ? 'Enabled ✓' : 'Disabled').padEnd(43)}│
 │                                                            │
 │   Endpoints:                                               │
 │   • GET  /health           - Health check                 │
 │   • POST /api/auth/login   - User login                   │
 │   • POST /api/ai/chat      - AI chat (requires auth)      │
 │   • GET  /api/ai/usage     - AI usage stats               │
+│   • POST /api/sync/trigger - Manual sync trigger          │
+│   • GET  /api/sync/status  - Sync status & logs           │
+│   • GET  /api/pfa/:orgId   - Get merged PFA data          │
+│   • POST /api/pfa/:orgId/draft - Save draft changes       │
 │                                                            │
 │   Documentation: See README.md                             │
 │                                                            │
@@ -117,13 +145,25 @@ const startServer = async () => {
 };
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received: closing HTTP server');
+  const { getWorkerInstance } = await import('./workers/PemsSyncWorker');
+  const worker = getWorkerInstance();
+  if (worker) {
+    worker.stop();
+    logger.info('Background sync worker stopped');
+  }
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT signal received: closing HTTP server');
+  const { getWorkerInstance } = await import('./workers/PemsSyncWorker');
+  const worker = getWorkerInstance();
+  if (worker) {
+    worker.stop();
+    logger.info('Background sync worker stopped');
+  }
   process.exit(0);
 });
 
