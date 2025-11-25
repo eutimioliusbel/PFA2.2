@@ -1,0 +1,99 @@
+{
+  "tableName": "users",
+  "rowCount": 7,
+  "checksum": "6de14e7ed14d85be34a5a1d3bc2734a2210ef52eb356dd06f7a2930f8e1ebc4f",
+  "exportedAt": "2025-11-25T17:36:39.976Z",
+  "data": [
+    {
+      "id": "d68bf7c3-cd46-4318-b10b-aeca3de894a4",
+      "username": "admin",
+      "email": "admin@pfavanguard.com",
+      "passwordHash": "$2a$10$2WFs0ZaS1ZVr6CqWJU4lNONJ4eiRj0bp88bPh5U7J2.PqXtjEKdEO",
+      "firstName": "System",
+      "lastName": "Administrator",
+      "avatarUrl": null,
+      "role": "admin",
+      "isActive": true,
+      "createdAt": "2025-11-25T00:17:38.672Z",
+      "updatedAt": "2025-11-25T00:17:38.672Z"
+    },
+    {
+      "id": "487acd2b-b7a7-4cf5-a6e8-fea3566e6fdb",
+      "username": "RRECTOR",
+      "email": "rick.rector@pfavanguard.com",
+      "passwordHash": "$2a$10$CmSSzvRkp3cpbzx0OwI1wefgBtGRhITazKI5BalFBYidXIv6S3HLa",
+      "firstName": "Rick",
+      "lastName": "Rector",
+      "avatarUrl": null,
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:39.803Z",
+      "updatedAt": "2025-11-25T04:34:39.803Z"
+    },
+    {
+      "id": "16fe196e-4714-4dfc-ae20-cd8fc46c7fd0",
+      "username": "UROSA",
+      "email": "ubi.rosa@pfavanguard.com",
+      "passwordHash": "$2a$10$r7y5Eo7r3d8wZahtNAhNau8okaEU7OghQZQe8yRIeKnW7pVFbQr0q",
+      "firstName": "Ubi",
+      "lastName": "Rosa",
+      "avatarUrl": null,
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:39.897Z",
+      "updatedAt": "2025-11-25T04:34:39.897Z"
+    },
+    {
+      "id": "5cc51b26-0220-4892-b258-ff0b291ec087",
+      "username": "NDUENAS",
+      "email": "nick.duenas@pfavanguard.com",
+      "passwordHash": "$2a$10$hU8W0pYQISE5deRA6G4SIunUmbYmHfvR8M..7znW2J8sYrZt1hwgq",
+      "firstName": "Nick",
+      "lastName": "Duenas",
+      "avatarUrl": null,
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:39.987Z",
+      "updatedAt": "2025-11-25T04:34:39.987Z"
+    },
+    {
+      "id": "63e0431d-1b5a-4b72-bfa7-ed3d26ccb0e2",
+      "username": "CHURFORD",
+      "email": "calvin.hurford@pfavanguard.com",
+      "passwordHash": "$2a$10$OTA6WOIPPdZaEooTdqplX.TlGXYFul7OKFtt0/79Q0lEatNTjx7ZS",
+      "firstName": "Calvin",
+      "lastName": "Hurford",
+      "avatarUrl": null,
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:40.081Z",
+      "updatedAt": "2025-11-25T04:34:40.081Z"
+    },
+    {
+      "id": "f4f1810c-e2c1-4150-93e8-3d2746a50c20",
+      "username": "TESTRADA",
+      "email": "tony.estrada@pfavanguard.com",
+      "passwordHash": "$2a$10$KnI8RsajZushfb3ccdlomO2XBi5F1pqEWJPdfgLa7xEuYyS.cssmG",
+      "firstName": "Tony",
+      "lastName": "Estrada",
+      "avatarUrl": null,
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:40.179Z",
+      "updatedAt": "2025-11-25T04:34:40.179Z"
+    },
+    {
+      "id": "35da0697-19df-4eed-bfa0-76f254585960",
+      "username": "SBRYSON",
+      "email": "steve.bryson@pfavanguard.com",
+      "passwordHash": "$2a$10$78wAfOCRb4frv7JoEeYbHeHPTjObnzVNCcluKfNHnd7TxXLwD4B8q",
+      "firstName": "Steve",
+      "lastName": "Bryson",
+      "avatarUrl": null,
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:40.271Z",
+      "updatedAt": "2025-11-25T04:34:40.271Z"
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "exportedAt": "2025-11-25T17:36:40.011Z",
+  "databaseType": "sqlite",
+  "totalRecords": 67,
+  "overallChecksum": "e689ecfeb88fefa5845c8e051ac9724948c7759285cddd6ab051d86f2b4684d7",
+  "schemaVersion": "prisma-schema-2025-11-25",
+  "tables": [
+    {
+      "tableName": "users",
+      "rowCount": 7,
+      "checksum": "6de14e7ed14d85be34a5a1d3bc2734a2210ef52eb356dd06f7a2930f8e1ebc4f",
+      "exportedAt": "2025-11-25T17:36:39.976Z"
+    },
+    {
+      "tableName": "organizations",
+      "rowCount": 28,
+      "checksum": "05025bee42af10668499d265b5a426c95f6d27ef1f495c636582069f3cd3f25f",
+      "exportedAt": "2025-11-25T17:36:39.978Z"
+    },
+    {
+      "tableName": "user_organizations",
+      "rowCount": 12,
+      "checksum": "5fe4ec7e5ea49ba477be0ffc553d151e2d784b55995b56cac13dc6e8fea806fa",
+      "exportedAt": "2025-11-25T17:36:39.979Z"
+    },
+    {
+      "tableName": "ai_providers",
+      "rowCount": 3,
+      "checksum": "48c3637a4c4befe114cb1bd88f677b8709392648990d0734cc317bf2fde8487d",
+      "exportedAt": "2025-11-25T17:36:39.980Z"
+    },
+    {
+      "tableName": "organization_ai_configs",
+      "rowCount": 2,
+      "checksum": "5c60fcd5af00d6c2e0f74b7736b683f2e48db1b9c549221f012c6d2492293a2f",
+      "exportedAt": "2025-11-25T17:36:39.982Z"
+    },
+    {
+      "tableName": "ai_usage_logs",
+      "rowCount": 0,
+      "checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "exportedAt": "2025-11-25T17:36:39.983Z"
+    },
+    {
+      "tableName": "api_configurations",
+      "rowCount": 10,
+      "checksum": "6950aa12381ad31786d0d387ba4a66ddf2e0c30f852cf03273771abc690b156c",
+      "exportedAt": "2025-11-25T17:36:39.985Z"
+    },
+    {
+      "tableName": "organization_api_credentials",
+      "rowCount": 0,
+      "checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "exportedAt": "2025-11-25T17:36:39.986Z"
+    },
+    {
+      "tableName": "data_source_mappings",
+      "rowCount": 4,
+      "checksum": "77b47b3c096371740cc77e248ed82caca781d81038b282b5a48571d5d4ff6183",
+      "exportedAt": "2025-11-25T17:36:39.988Z"
+    },
+    {
+      "tableName": "field_configurations",
+      "rowCount": 1,
+      "checksum": "d33703fb1bd5ae6223c2eaecf46bca7923aec5132b2587452d5c0e4edf1cfe85",
+      "exportedAt": "2025-11-25T17:36:39.989Z"
+    },
+    {
+      "tableName": "pfa_records",
+      "rowCount": 0,
+      "checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "exportedAt": "2025-11-25T17:36:39.991Z"
+    },
+    {
+      "tableName": "sync_logs",
+      "rowCount": 0,
+      "checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "exportedAt": "2025-11-25T17:36:39.992Z"
+    }
+  ]
+}

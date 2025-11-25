@@ -1,0 +1,44 @@
+{
+  "tableName": "organization_ai_configs",
+  "rowCount": 2,
+  "checksum": "5c60fcd5af00d6c2e0f74b7736b683f2e48db1b9c549221f012c6d2492293a2f",
+  "exportedAt": "2025-11-25T17:36:39.982Z",
+  "data": [
+    {
+      "id": "f4fb27bc-55ff-4181-8a04-90898495ad27",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "enabled": true,
+      "accessLevel": "full-access",
+      "primaryProviderId": "gemini-default",
+      "fallbackProviderIds": "[]",
+      "routingRules": null,
+      "dailyLimitUsd": 10,
+      "monthlyLimitUsd": 100,
+      "alertThresholdPercent": 80,
+      "maxContextRecords": 50,
+      "includeHistoricalData": false,
+      "enableSemanticCache": true,
+      "cacheExpirationHours": 24,
+      "createdAt": "2025-11-25T11:37:44.328Z",
+      "updatedAt": "2025-11-25T11:37:44.328Z"
+    },
+    {
+      "id": "f14adc70-ad63-430d-9315-ed8eab395f2e",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "enabled": true,
+      "accessLevel": "full-access",
+      "primaryProviderId": "gemini-default",
+      "fallbackProviderIds": "[]",
+      "routingRules": null,
+      "dailyLimitUsd": 10,
+      "monthlyLimitUsd": 100,
+      "alertThresholdPercent": 80,
+      "maxContextRecords": 50,
+      "includeHistoricalData": false,
+      "enableSemanticCache": true,
+      "cacheExpirationHours": 24,
+      "createdAt": "2025-11-25T11:37:44.339Z",
+      "updatedAt": "2025-11-25T11:37:44.339Z"
+    }
+  ]
+}

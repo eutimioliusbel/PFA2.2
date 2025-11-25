@@ -1,0 +1,22 @@
+{
+  "tableName": "field_configurations",
+  "rowCount": 1,
+  "checksum": "d33703fb1bd5ae6223c2eaecf46bca7923aec5132b2587452d5c0e4edf1cfe85",
+  "exportedAt": "2025-11-25T17:36:39.989Z",
+  "data": [
+    {
+      "id": "default-pfa-config",
+      "organizationId": null,
+      "name": "Standard PFA Export",
+      "description": "Default field configuration for PFA data export/import",
+      "isDefault": true,
+      "fieldMappings": "[{\"field\":\"pfaId\",\"label\":\"PFA ID\",\"enabled\":true,\"order\":1},{\"field\":\"organization\",\"label\":\"Organization\",\"enabled\":true,\"order\":2},{\"field\":\"areaSilo\",\"label\":\"Area/Silo\",\"enabled\":true,\"order\":3},{\"field\":\"category\",\"label\":\"Category\",\"enabled\":true,\"order\":4},{\"field\":\"class\",\"label\":\"Class\",\"enabled\":true,\"order\":5},{\"field\":\"source\",\"label\":\"Source\",\"enabled\":true,\"order\":6},{\"field\":\"dor\",\"label\":\"DOR\",\"enabled\":true,\"order\":7},{\"field\":\"monthlyRate\",\"label\":\"Monthly Rate\",\"enabled\":true,\"order\":8},{\"field\":\"purchasePrice\",\"label\":\"Purchase Price\",\"enabled\":true,\"order\":9},{\"field\":\"manufacturer\",\"label\":\"Manufacturer\",\"enabled\":true,\"order\":10},{\"field\":\"model\",\"label\":\"Model\",\"enabled\":true,\"order\":11},{\"field\":\"originalStart\",\"label\":\"Plan Start\",\"enabled\":true,\"order\":12},{\"field\":\"originalEnd\",\"label\":\"Plan End\",\"enabled\":true,\"order\":13},{\"field\":\"forecastStart\",\"label\":\"Forecast Start\",\"enabled\":true,\"order\":14},{\"field\":\"forecastEnd\",\"label\":\"Forecast End\",\"enabled\":true,\"order\":15},{\"field\":\"actualStart\",\"label\":\"Actual Start\",\"enabled\":true,\"order\":16},{\"field\":\"actualEnd\",\"label\":\"Actual End\",\"enabled\":true,\"order\":17},{\"field\":\"equipment\",\"label\":\"Equipment\",\"enabled\":true,\"order\":18},{\"field\":\"contract\",\"label\":\"Contract\",\"enabled\":false,\"order\":19},{\"field\":\"isActualized\",\"label\":\"Is Actualized\",\"enabled\":false,\"order\":20},{\"field\":\"isDiscontinued\",\"label\":\"Is Discontinued\",\"enabled\":false,\"order\":21},{\"field\":\"isFundsTransferable\",\"label\":\"Is Funds Transferable\",\"enabled\":false,\"order\":22}]",
+      "includeHeaders": true,
+      "dateFormat": "YYYY-MM-DD",
+      "delimiter": ",",
+      "encoding": "UTF-8",
+      "createdAt": "2025-11-25T04:23:49.528Z",
+      "updatedAt": "2025-11-25T04:23:49.528Z"
+    }
+  ]
+}

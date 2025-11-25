@@ -1,0 +1,72 @@
+{
+  "tableName": "data_source_mappings",
+  "rowCount": 4,
+  "checksum": "77b47b3c096371740cc77e248ed82caca781d81038b282b5a48571d5d4ff6183",
+  "exportedAt": "2025-11-25T17:36:39.988Z",
+  "data": [
+    {
+      "id": "926c5b61-19c7-44be-a9eb-5931cd6db6ea",
+      "createdAt": "2025-11-25T12:05:27.250Z",
+      "updatedAt": "2025-11-25T14:18:31.308Z",
+      "entityType": "pfa",
+      "organizationId": null,
+      "apiConfigId": "pems-global-pfa-read",
+      "priority": 1,
+      "isActive": true,
+      "lastUsedAt": "2025-11-25T14:18:31.306Z",
+      "lastSuccessAt": "2025-11-25T14:18:31.306Z",
+      "lastFailureAt": null,
+      "successCount": 66,
+      "failureCount": 0,
+      "avgResponseTime": 3292
+    },
+    {
+      "id": "0e93de17-d34c-42e4-b192-2ec370d0e88f",
+      "createdAt": "2025-11-25T12:05:27.263Z",
+      "updatedAt": "2025-11-25T12:05:27.263Z",
+      "entityType": "asset_master",
+      "organizationId": null,
+      "apiConfigId": "pems-global-assets",
+      "priority": 1,
+      "isActive": true,
+      "lastUsedAt": null,
+      "lastSuccessAt": null,
+      "lastFailureAt": null,
+      "successCount": 0,
+      "failureCount": 0,
+      "avgResponseTime": null
+    },
+    {
+      "id": "cda909fe-f25a-4127-8e0c-ad2bdfe18b65",
+      "createdAt": "2025-11-25T12:05:27.275Z",
+      "updatedAt": "2025-11-25T12:47:24.926Z",
+      "entityType": "classifications",
+      "organizationId": null,
+      "apiConfigId": "pems-global-classes",
+      "priority": 1,
+      "isActive": true,
+      "lastUsedAt": null,
+      "lastSuccessAt": null,
+      "lastFailureAt": null,
+      "successCount": 0,
+      "failureCount": 0,
+      "avgResponseTime": null
+    },
+    {
+      "id": "8d9f1d18-480a-4c19-9ffc-f8ded1db90af",
+      "createdAt": "2025-11-25T12:05:27.286Z",
+      "updatedAt": "2025-11-25T13:04:39.525Z",
+      "entityType": "organizations",
+      "organizationId": null,
+      "apiConfigId": "pems-global-organizations",
+      "priority": 1,
+      "isActive": true,
+      "lastUsedAt": "2025-11-25T13:04:39.524Z",
+      "lastSuccessAt": "2025-11-25T13:04:39.524Z",
+      "lastFailureAt": null,
+      "successCount": 7,
+      "failureCount": 0,
+      "avgResponseTime": 580
+    }
+  ]
+}

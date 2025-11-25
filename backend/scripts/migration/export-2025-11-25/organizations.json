@@ -1,0 +1,288 @@
+{
+  "tableName": "organizations",
+  "rowCount": 28,
+  "checksum": "05025bee42af10668499d265b5a426c95f6d27ef1f495c636582069f3cd3f25f",
+  "exportedAt": "2025-11-25T17:36:39.978Z",
+  "data": [
+    {
+      "id": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "code": "RIO",
+      "name": "Rio Grande",
+      "description": "Rio Grande",
+      "logoUrl": null,
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:40.286Z",
+      "updatedAt": "2025-11-25T13:04:39.480Z"
+    },
+    {
+      "id": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "code": "PORTARTHUR",
+      "name": "Port Arthur",
+      "description": "Port Arthur",
+      "logoUrl": null,
+      "isActive": true,
+      "createdAt": "2025-11-25T04:34:40.297Z",
+      "updatedAt": "2025-11-25T13:04:39.415Z"
+    },
+    {
+      "id": "e3d00b7f-f238-4882-a4bb-3c8d25b9b7a0",
+      "code": "*",
+      "name": "BECHTEL Common Org.",
+      "description": "BECHTEL Common Org.",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=*&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.146Z",
+      "updatedAt": "2025-11-25T13:04:39.146Z"
+    },
+    {
+      "id": "b6e41c1a-5e6d-4161-857a-9e70d1a2870c",
+      "code": "26026",
+      "name": "VCS-VOGTLE SERVICES",
+      "description": "VCS-VOGTLE SERVICES",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=26026&backgroundColor=10b981",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.161Z",
+      "updatedAt": "2025-11-25T13:04:39.161Z"
+    },
+    {
+      "id": "adfefd9f-33a1-454d-b255-7c7a9e96f7cc",
+      "code": "BATAM",
+      "name": "BATAM MOD YARD",
+      "description": "BATAM MOD YARD",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=BATAM&backgroundColor=10b981",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.178Z",
+      "updatedAt": "2025-11-25T13:04:39.178Z"
+    },
+    {
+      "id": "2f1fca4a-03c5-4406-b94a-7856c580f7d6",
+      "code": "BECH",
+      "name": "BECHTEL",
+      "description": "BECHTEL",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=BECH&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.191Z",
+      "updatedAt": "2025-11-25T13:04:39.191Z"
+    },
+    {
+      "id": "b65f5563-6cac-45ab-8b15-98fdc11c05a5",
+      "code": "BEOIST",
+      "name": "BEO IS&T",
+      "description": "BEO IS&T",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=BEOIST&backgroundColor=3b82f6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.205Z",
+      "updatedAt": "2025-11-25T13:04:39.205Z"
+    },
+    {
+      "id": "4b813d56-3025-4fe6-a5c0-70d6c86bde7e",
+      "code": "CARDINAL",
+      "name": "CARDINAL SEMICONDUCTOR FAB",
+      "description": "CARDINAL SEMICONDUCTOR FAB",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=CARDINAL&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.218Z",
+      "updatedAt": "2025-11-25T13:04:39.218Z"
+    },
+    {
+      "id": "c755b334-07af-4b8f-8ffa-718f53c5579a",
+      "code": "CCL3",
+      "name": "CORPUS CHRISTI LNG STAGE 3",
+      "description": "CORPUS CHRISTI LNG STAGE 3",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=CCL3&backgroundColor=ef4444",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.233Z",
+      "updatedAt": "2025-11-25T13:04:39.233Z"
+    },
+    {
+      "id": "5518cdcb-08eb-4f09-93d2-a20214544527",
+      "code": "CCL3B",
+      "name": "Corpus Christi Train 8 & 9",
+      "description": "Corpus Christi Train 8 & 9",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=CCL3B&backgroundColor=ef4444",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.247Z",
+      "updatedAt": "2025-11-25T13:04:39.247Z"
+    },
+    {
+      "id": "c0f41dfe-181e-4b18-922c-9ff544802d8c",
+      "code": "CRANES",
+      "name": "Cranes",
+      "description": "Cranes",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=CRANES&backgroundColor=f59e0b",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.260Z",
+      "updatedAt": "2025-11-25T13:04:39.260Z"
+    },
+    {
+      "id": "ea1e8f47-093e-4dae-8371-8dc9a1749a69",
+      "code": "CUTLASS",
+      "name": "CUTLASS SOLAR PV PROJECT",
+      "description": "CUTLASS SOLAR PV PROJECT",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=CUTLASS&backgroundColor=06b6d4",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.276Z",
+      "updatedAt": "2025-11-25T13:04:39.276Z"
+    },
+    {
+      "id": "4bff3a43-4ce8-421a-8b8d-ad1e2faf2ec0",
+      "code": "CUTLASS2",
+      "name": "CUTLASS SOLAR PV PROJECT 2",
+      "description": "CUTLASS SOLAR PV PROJECT 2",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=CUTLASS2&backgroundColor=ef4444",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.292Z",
+      "updatedAt": "2025-11-25T13:04:39.292Z"
+    },
+    {
+      "id": "ac135049-b827-4062-9f68-af3804d9a1d5",
+      "code": "DRIFTWOOD",
+      "name": "DRIFTWOOD LNG LLC",
+      "description": "DRIFTWOOD LNG LLC",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=DRIFTWOOD&backgroundColor=3b82f6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.307Z",
+      "updatedAt": "2025-11-25T13:04:39.307Z"
+    },
+    {
+      "id": "af4f8c74-a682-41dd-ad3e-ba092b23e543",
+      "code": "ESCAPE",
+      "name": "ESCAPE SOLAR",
+      "description": "ESCAPE SOLAR",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=ESCAPE&backgroundColor=f59e0b",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.320Z",
+      "updatedAt": "2025-11-25T13:04:39.320Z"
+    },
+    {
+      "id": "3d9863d8-c5bc-4997-8a9f-321ff7fd6cbc",
+      "code": "HYBCMC",
+      "name": "Hyundai Battery CMC",
+      "description": "Hyundai Battery CMC",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=HYBCMC&backgroundColor=06b6d4",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.331Z",
+      "updatedAt": "2025-11-25T13:04:39.331Z"
+    },
+    {
+      "id": "3a0b7b4c-7290-4151-a2db-56e7c6de8b71",
+      "code": "LALNG",
+      "name": "Louisiana LNG ",
+      "description": "Louisiana LNG ",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=LALNG&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.343Z",
+      "updatedAt": "2025-11-25T13:04:39.343Z"
+    },
+    {
+      "id": "50486552-a373-4248-8eb2-1276baedac16",
+      "code": "ML2",
+      "name": "MOBILE LAUNCHER 2",
+      "description": "MOBILE LAUNCHER 2",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=ML2&backgroundColor=3b82f6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.355Z",
+      "updatedAt": "2025-11-25T13:04:39.355Z"
+    },
+    {
+      "id": "7ce5f2e2-d1a8-426b-8d18-52c1b0801c35",
+      "code": "MLP",
+      "name": "MINERA LOS PELAMBRES ",
+      "description": "MINERA LOS PELAMBRES ",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=MLP&backgroundColor=f59e0b",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.368Z",
+      "updatedAt": "2025-11-25T13:04:39.368Z"
+    },
+    {
+      "id": "1a0301bb-b626-4e8f-802d-90ad72acf333",
+      "code": "MOUNTAINPASS",
+      "name": "MOUNTAIN PASS RARE EARTH SEPARATION PROJECT ",
+      "description": "MOUNTAIN PASS RARE EARTH SEPARATION PROJECT ",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=MOUNTAINPASS&backgroundColor=ef4444",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.380Z",
+      "updatedAt": "2025-11-25T13:04:39.380Z"
+    },
+    {
+      "id": "535658e2-4cef-43a5-9592-10860eb742e3",
+      "code": "ORIANA",
+      "name": "Oriana Solar Project",
+      "description": "Oriana Solar Project",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=ORIANA&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.391Z",
+      "updatedAt": "2025-11-25T13:04:39.391Z"
+    },
+    {
+      "id": "31784dba-4fd4-4cdd-91e4-7186f3444ac8",
+      "code": "PLUTO",
+      "name": "PLUTO LNG EPC (ONSHORE)",
+      "description": "PLUTO LNG EPC (ONSHORE)",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=PLUTO&backgroundColor=06b6d4",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.405Z",
+      "updatedAt": "2025-11-25T13:04:39.405Z"
+    },
+    {
+      "id": "e623125b-894b-470c-8f49-c14ffdca0d1e",
+      "code": "POSEY",
+      "name": "Posey ",
+      "description": "Posey ",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=POSEY&backgroundColor=ef4444",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.431Z",
+      "updatedAt": "2025-11-25T13:04:39.431Z"
+    },
+    {
+      "id": "1107e5e9-a1f2-485e-bca6-7c2cb13a07e5",
+      "code": "PTREWSWRNTY",
+      "name": "PTR-EWS RESEVOIR WARRANTY",
+      "description": "PTR-EWS RESEVOIR WARRANTY",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=PTREWSWRNTY&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.443Z",
+      "updatedAt": "2025-11-25T13:04:39.443Z"
+    },
+    {
+      "id": "336439c6-34c0-4d80-bb9c-747b147097fb",
+      "code": "QB2",
+      "name": "QUEBRADA BLANCA PHASE 2 - 140 KTPD COOPER ",
+      "description": "QUEBRADA BLANCA PHASE 2 - 140 KTPD COOPER ",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=QB2&backgroundColor=06b6d4",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.457Z",
+      "updatedAt": "2025-11-25T13:04:39.457Z"
+    },
+    {
+      "id": "50c3937e-0cc5-4a2f-841d-09c35236fa91",
+      "code": "RENTAL",
+      "name": "Rentals",
+      "description": "Rentals",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=RENTAL&backgroundColor=3b82f6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.468Z",
+      "updatedAt": "2025-11-25T13:04:39.468Z"
+    },
+    {
+      "id": "9453485a-1033-43c5-9be6-1765b969ebef",
+      "code": "SFEP",
+      "name": "SOUTH FIELD ENERGY PROJECT",
+      "description": "SOUTH FIELD ENERGY PROJECT",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=SFEP&backgroundColor=f59e0b",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.495Z",
+      "updatedAt": "2025-11-25T13:04:39.495Z"
+    },
+    {
+      "id": "63fabb88-ab06-4928-a352-16eaf99f6745",
+      "code": "YANACOCHA",
+      "name": "YANACOCHA SULFIDES STAGE 4- ONSHORE",
+      "description": "YANACOCHA SULFIDES STAGE 4- ONSHORE",
+      "logoUrl": "https://api.dicebear.com/7.x/shapes/svg?seed=YANACOCHA&backgroundColor=8b5cf6",
+      "isActive": true,
+      "createdAt": "2025-11-25T13:04:39.508Z",
+      "updatedAt": "2025-11-25T13:04:39.508Z"
+    }
+  ]
+}

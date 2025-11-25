@@ -1,0 +1,92 @@
+{
+  "tableName": "user_organizations",
+  "rowCount": 12,
+  "checksum": "5fe4ec7e5ea49ba477be0ffc553d151e2d784b55995b56cac13dc6e8fea806fa",
+  "exportedAt": "2025-11-25T17:36:39.979Z",
+  "data": [
+    {
+      "id": "fab19e8a-076b-4204-8d2d-9ce36cad4440",
+      "userId": "d68bf7c3-cd46-4318-b10b-aeca3de894a4",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "role": "owner",
+      "createdAt": "2025-11-25T04:34:40.311Z"
+    },
+    {
+      "id": "01aff8de-1864-454d-9c58-f647e3a2b96f",
+      "userId": "d68bf7c3-cd46-4318-b10b-aeca3de894a4",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "role": "owner",
+      "createdAt": "2025-11-25T04:34:40.321Z"
+    },
+    {
+      "id": "51583905-634c-4433-922f-a675c255e830",
+      "userId": "487acd2b-b7a7-4cf5-a6e8-fea3566e6fdb",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.201Z"
+    },
+    {
+      "id": "e940d5de-018f-450b-a9f2-3fbb3b4c9805",
+      "userId": "487acd2b-b7a7-4cf5-a6e8-fea3566e6fdb",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.212Z"
+    },
+    {
+      "id": "8d139dbb-64d1-41bb-a504-4fc39c95ced6",
+      "userId": "16fe196e-4714-4dfc-ae20-cd8fc46c7fd0",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.222Z"
+    },
+    {
+      "id": "d54a61c0-e16c-4b6c-a779-553d40600bfb",
+      "userId": "16fe196e-4714-4dfc-ae20-cd8fc46c7fd0",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.234Z"
+    },
+    {
+      "id": "ac425412-0a0d-4220-9fe8-c9ff436c74f2",
+      "userId": "63e0431d-1b5a-4b72-bfa7-ed3d26ccb0e2",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.246Z"
+    },
+    {
+      "id": "58439acf-7635-40fd-8952-21f1d4932ac6",
+      "userId": "63e0431d-1b5a-4b72-bfa7-ed3d26ccb0e2",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.258Z"
+    },
+    {
+      "id": "fa2b97e2-328e-467b-9ae7-d55dda8c0104",
+      "userId": "f4f1810c-e2c1-4150-93e8-3d2746a50c20",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.273Z"
+    },
+    {
+      "id": "80c6bc82-45c2-4e6c-857b-96047708dae4",
+      "userId": "f4f1810c-e2c1-4150-93e8-3d2746a50c20",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.284Z"
+    },
+    {
+      "id": "232886b1-09b6-4210-89cd-668d9d4562a7",
+      "userId": "35da0697-19df-4eed-bfa0-76f254585960",
+      "organizationId": "76198c87-6b44-4ebb-9382-abe16fee4805",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.297Z"
+    },
+    {
+      "id": "00f6d648-f5b9-4f47-aca1-e303c1d631a2",
+      "userId": "35da0697-19df-4eed-bfa0-76f254585960",
+      "organizationId": "873e9b11-7c0d-42c4-9ece-efdc005c976c",
+      "role": "member",
+      "createdAt": "2025-11-25T11:37:44.308Z"
+    }
+  ]
+}
