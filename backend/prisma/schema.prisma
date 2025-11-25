@@ -230,6 +230,7 @@ model ApiConfiguration {
   // Relationships
   organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orgCredentials        OrganizationApiCredentials[] // Org-specific credentials for this global config
+  dataSourceMappings    DataSourceMapping[] // Data entity mappings for this API
 
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
@@ -266,6 +267,40 @@ model OrganizationApiCredentials {
   @@index([organizationId])
   @@index([apiConfigurationId])
   @@map("organization_api_credentials")
+}
+
+// Data Source Mapping (Configurable API-to-Entity mapping)
+// Maps data entities to API configurations with priority and performance tracking
+model DataSourceMapping {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Entity Definition
+  entityType      String   // 'pfa', 'organizations', 'asset_master', 'classifications'
+  organizationId  String?  // null = global, set = org-specific override
+
+  // API Configuration Reference
+  apiConfigId     String
+  apiConfig       ApiConfiguration @relation(fields: [apiConfigId], references: [id], onDelete: Cascade)
+
+  // Priority & Status
+  priority        Int      @default(1)  // 1 = primary, 2+ = fallbacks
+  isActive        Boolean  @default(true)
+
+  // Performance Tracking
+  lastUsedAt      DateTime?
+  lastSuccessAt   DateTime?
+  lastFailureAt   DateTime?
+  successCount    Int      @default(0)
+  failureCount    Int      @default(0)
+  avgResponseTime Int?     // milliseconds
+
+  // Unique constraint: one active mapping per entity per org per priority
+  @@unique([entityType, organizationId, priority])
+  @@index([entityType, isActive, priority])
+  @@index([apiConfigId])
+  @@map("data_source_mappings")
 }
 
 // ============================================================================
@@ -320,6 +355,21 @@ model PfaRecord {
   lastModified          DateTime?
   lastModifiedBy        String?
 
+  // Change Tracking (for bi-directional sync with PEMS)
+  syncState             String    @default("pristine") // pristine, modified, pending_sync, sync_error
+  lastSyncedAt          DateTime? // When last pushed to PEMS
+  pemsVersion           String?   // PEMS lastModified timestamp (for conflict detection)
+  localVersion          Int       @default(1) // Increment on every local edit
+
+  // Modified Fields Tracking (for incremental sync)
+  modifiedFields        String?   // JSON array: ["forecastStart", "forecastEnd"]
+  modifiedBy            String?   // User ID who made local changes
+  modifiedAt            DateTime? // When local changes were made
+
+  // Sync Error Handling
+  syncErrorMessage      String?
+  syncRetryCount        Int       @default(0)
+
   organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   createdAt             DateTime  @default(now())
@@ -328,6 +378,8 @@ model PfaRecord {
   @@unique([organizationId, pfaId])
   @@index([organizationId])
   @@index([updatedAt])
+  @@index([organizationId, syncState]) // Fast query for pending changes
+  @@index([organizationId, modifiedAt]) // Recent changes for incremental sync
   @@map("pfa_records")
 }
 
