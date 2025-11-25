@@ -4,14 +4,16 @@
   "description": "Backend API server for PFA Vanguard - Construction Equipment Tracking System",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "npm run prisma:seed && npx tsx init-pems-credentials.ts && tsx watch src/server.ts",
+    "dev:no-seed": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
-    "db:seed": "npm run prisma:seed"
+    "prisma:seed-full": "npm run prisma:seed && npx tsx init-pems-credentials.ts",
+    "db:seed": "npm run prisma:seed-full"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

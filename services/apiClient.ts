@@ -574,6 +574,50 @@ class ApiClient {
   }
 
   // ============================================================================
+  // Data Source Mappings
+  // ============================================================================
+
+  async getDataSourceMappings(): Promise<any[]> {
+    return this.request('/api/data-sources/mappings');
+  }
+
+  async getDataSourceMapping(id: string): Promise<any> {
+    return this.request(`/api/data-sources/mappings/${id}`);
+  }
+
+  async getDataSourceMappingMetrics(id: string): Promise<any> {
+    return this.request(`/api/data-sources/mappings/${id}/metrics`);
+  }
+
+  async createDataSourceMapping(data: {
+    entityType: string;
+    organizationId?: string;
+    apiConfigId: string;
+    priority?: number;
+    isActive?: boolean;
+  }): Promise<any> {
+    return this.request('/api/data-sources/mappings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateDataSourceMapping(id: string, updates: any): Promise<any> {
+    return this.request(`/api/data-sources/mappings/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteDataSourceMapping(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/data-sources/mappings/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
   // Health Check
   // ============================================================================
 

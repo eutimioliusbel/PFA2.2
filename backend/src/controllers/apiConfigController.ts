@@ -562,7 +562,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
             latencyMs: 0
           });
 
-        } else if (config.usage === 'PEMS_ASSETS' || config.usage === 'PEMS_CLASSES') {
+        } else if (config.usage === 'PEMS_ASSETS' || config.usage === 'PEMS_CLASSES' || config.usage === 'PEMS_ORGANIZATIONS') {
           // REST API - just GET request with headers
           method = 'GET';
           requestBody = null;

@@ -12,6 +12,7 @@ import { AssetMasterView } from './admin/AssetMasterView';
 import { ClassificationView } from './admin/ClassificationView';
 import { PfaMasterView } from './admin/PfaMasterView';
 import { GenericMasterView } from './admin/GenericMasterView';
+import { DataSourceManager } from './admin/DataSourceManager';
 import { Users, Building2, Plug, LogOut, Settings, Activity, FileSpreadsheet, FileText, User as UserIcon, Database, FileDown, PanelLeftClose, PanelLeftOpen, Monitor, Tag, Table, Layers, Truck, Factory, Box } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -45,7 +46,7 @@ interface AdminDashboardProps {
   onBulkGenerateIcons?: () => void;
 }
 
-type AdminView = 'users' | 'orgs' | 'apis' | 'system' | 'import' | 'export' | 'asset_master' | 'class_master' | 'pfa_master' | 'dors' | 'sources' | 'manufacturers' | 'models';
+type AdminView = 'users' | 'orgs' | 'apis' | 'system' | 'import' | 'export' | 'asset_master' | 'class_master' | 'pfa_master' | 'dors' | 'sources' | 'manufacturers' | 'models' | 'data_sources';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
     currentUser, onLogout, onLaunchLab, onOpenProfile,
@@ -157,13 +158,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             active={activeView === 'users'}
                             onClick={() => setActiveView('users')} 
                         />
-                        <MenuItem 
-                            label="API Connectivity" 
-                            icon={Plug} 
+                        <MenuItem
+                            label="API Connectivity"
+                            icon={Plug}
                             active={activeView === 'apis'}
-                            onClick={() => setActiveView('apis')} 
+                            onClick={() => setActiveView('apis')}
                         />
-                        
+                        <MenuItem
+                            label="Data Source Mappings"
+                            icon={Layers}
+                            active={activeView === 'data_sources'}
+                            onClick={() => setActiveView('data_sources')}
+                        />
+
                         <div className="px-3 mt-6 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Data & Config</div>
 
                         <MenuItem 
@@ -290,6 +297,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {activeView === 'orgs' && <OrgManager orgs={orgs} setOrgs={setOrgs} availableAiApis={aiApis} onGenerateAiLogo={onGenerateAiIcon ? (ctx) => onGenerateAiIcon(ctx, 'Org') : undefined} />}
                     {activeView === 'users' && <UserManager users={users} setUsers={setUsers} orgs={orgs} currentUser={currentUser} onGenerateAiAvatar={onGenerateAiIcon ? (ctx) => onGenerateAiIcon(ctx, 'User') : undefined} />}
                     {activeView === 'apis' && <ApiConnectivity />}
+                    {activeView === 'data_sources' && <DataSourceManager />}
                     {activeView === 'system' && <SystemManager config={systemConfig} setConfig={setSystemConfig} />}
                     {activeView === 'import' && <DataImporter onImportExcel={onImportExcel} config={exportConfig} assets={assets} />}
                     {activeView === 'export' && <FieldConfigManager config={exportConfig} setConfig={setExportConfig} />}

@@ -14,6 +14,7 @@ import fieldConfigRoutes from './routes/fieldConfigRoutes';
 import logRoutes from './routes/logRoutes';
 import userRoutes from './routes/userRoutes';
 import orgRoutes from './routes/orgRoutes';
+import dataSourceRoutes from './routes/dataSource';
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/field-configs', fieldConfigRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/organizations', orgRoutes);
+app.use('/api/data-sources', dataSourceRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

@@ -19,16 +19,20 @@ async function main() {
   const PEMS_USERNAME = 'APIUSER';
   const PEMS_PASSWORD = 'BEOSugarland2025!';
   const PEMS_TENANT = 'BECHTEL_DEV';
-  const PEMS_ORGANIZATION = 'BECH';
+  const PEMS_GRID_CODE = 'CUPFAG';
+  const PEMS_GRID_ID = '100541';
 
   // Encrypt credentials
   const usernameEncrypted = encrypt(PEMS_USERNAME);
   const passwordEncrypted = encrypt(PEMS_PASSWORD);
 
-  // Store tenant and organization as custom headers
+  // Store tenant, gridCode, and gridId as custom headers
+  // NOTE: Do NOT set global 'organization' here - each org uses its own database code
+  // (RIO syncs as "RIO", HOLNG as "HOLNG", etc.)
   const customHeaders = JSON.stringify([
     { key: 'tenant', value: PEMS_TENANT },
-    { key: 'organization', value: PEMS_ORGANIZATION }
+    { key: 'gridCode', value: PEMS_GRID_CODE },
+    { key: 'gridId', value: PEMS_GRID_ID }
   ]);
 
   // ============================================================================
@@ -83,7 +87,19 @@ async function main() {
       status: 'untested'
     }
   });
-  console.log('✓ PEMS Classes - Credentials configured\n');
+  console.log('✓ PEMS Classes - Credentials configured');
+
+  // Update PEMS Organizations API
+  await prisma.apiConfiguration.update({
+    where: { id: 'pems-global-organizations' },
+    data: {
+      authKeyEncrypted: usernameEncrypted,
+      authValueEncrypted: passwordEncrypted,
+      customHeaders,
+      status: 'untested'
+    }
+  });
+  console.log('✓ PEMS Organizations - Credentials configured\n');
 
   // ============================================================================
   // Summary
@@ -98,12 +114,15 @@ async function main() {
   console.log('   • PEMS PFA Write (UserDefinedScreenService)');
   console.log('   • PEMS Assets    (equipment/assets)');
   console.log('   • PEMS Classes   (equipment/categories)');
+  console.log('   • PEMS Organizations (organization endpoint)');
   console.log('');
   console.log('🔐 Credentials:');
   console.log(`   Username:     ${PEMS_USERNAME}`);
   console.log(`   Password:     ${'*'.repeat(PEMS_PASSWORD.length)}`);
   console.log(`   Tenant:       ${PEMS_TENANT}`);
-  console.log(`   Organization: ${PEMS_ORGANIZATION}`);
+  console.log(`   Organization: <uses database org code> (RIO, HOLNG, PORTARTHUR, etc.)`);
+  console.log(`   Grid Code:    ${PEMS_GRID_CODE}`);
+  console.log(`   Grid ID:      ${PEMS_GRID_ID}`);
   console.log('');
   console.log('🚀 Next Steps:');
   console.log('   1. Test PEMS connections in Admin Dashboard → API Connectivity');

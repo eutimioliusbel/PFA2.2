@@ -1,0 +1,179 @@
+{
+  "timestamp": "2025-11-25T17:16:54.503Z",
+  "databaseSize": "220.00 KB",
+  "tables": [
+    {
+      "tableName": "users",
+      "rowCount": 7,
+      "sampleData": {
+        "id": "d68bf7c3-cd46-4318-b10b-aeca3de894a4",
+        "username": "admin"
+      },
+      "foreignKeys": [],
+      "indexes": [
+        "username",
+        "email"
+      ]
+    },
+    {
+      "tableName": "organizations",
+      "rowCount": 28,
+      "sampleData": {
+        "id": "76198c87-6b44-4ebb-9382-abe16fee4805",
+        "code": "RIO",
+        "name": "Rio Grande"
+      },
+      "foreignKeys": [],
+      "indexes": [
+        "code"
+      ]
+    },
+    {
+      "tableName": "user_organizations",
+      "rowCount": 12,
+      "sampleData": null,
+      "foreignKeys": [
+        "userId -> users.id",
+        "organizationId -> organizations.id"
+      ],
+      "indexes": [
+        "userId, organizationId (unique)"
+      ]
+    },
+    {
+      "tableName": "ai_providers",
+      "rowCount": 3,
+      "sampleData": {
+        "id": "gemini-default",
+        "type": "gemini",
+        "name": "Google Gemini (Default)"
+      },
+      "foreignKeys": [],
+      "indexes": []
+    },
+    {
+      "tableName": "organization_ai_configs",
+      "rowCount": 2,
+      "sampleData": null,
+      "foreignKeys": [
+        "organizationId -> organizations.id (unique)"
+      ],
+      "indexes": [
+        "organizationId"
+      ]
+    },
+    {
+      "tableName": "ai_usage_logs",
+      "rowCount": 0,
+      "sampleData": null,
+      "foreignKeys": [
+        "userId -> users.id"
+      ],
+      "indexes": [
+        "organizationId, createdAt",
+        "userId, createdAt",
+        "queryHash"
+      ]
+    },
+    {
+      "tableName": "api_configurations",
+      "rowCount": 10,
+      "sampleData": {
+        "id": "pems-global-pfa-read",
+        "name": "PEMS - PFA Data (Read)",
+        "usage": "PEMS_PFA_READ",
+        "organizationId": null
+      },
+      "foreignKeys": [
+        "organizationId -> organizations.id (nullable)"
+      ],
+      "indexes": [
+        "organizationId, usage"
+      ]
+    },
+    {
+      "tableName": "organization_api_credentials",
+      "rowCount": 0,
+      "sampleData": null,
+      "foreignKeys": [
+        "organizationId -> organizations.id",
+        "apiConfigurationId -> api_configurations.id"
+      ],
+      "indexes": [
+        "organizationId",
+        "apiConfigurationId",
+        "organizationId, apiConfigurationId (unique)"
+      ]
+    },
+    {
+      "tableName": "data_source_mappings",
+      "rowCount": 4,
+      "sampleData": null,
+      "foreignKeys": [
+        "apiConfigId -> api_configurations.id"
+      ],
+      "indexes": [
+        "entityType, organizationId, priority (unique)",
+        "entityType, isActive, priority",
+        "apiConfigId"
+      ]
+    },
+    {
+      "tableName": "field_configurations",
+      "rowCount": 1,
+      "sampleData": null,
+      "foreignKeys": [
+        "organizationId -> organizations.id (nullable)"
+      ],
+      "indexes": [
+        "organizationId"
+      ]
+    },
+    {
+      "tableName": "pfa_records",
+      "rowCount": 0,
+      "sampleData": null,
+      "foreignKeys": [
+        "organizationId -> organizations.id"
+      ],
+      "indexes": [
+        "organizationId",
+        "updatedAt",
+        "organizationId, syncState",
+        "organizationId, modifiedAt",
+        "organizationId, pfaId (unique)"
+      ]
+    },
+    {
+      "tableName": "sync_logs",
+      "rowCount": 0,
+      "sampleData": null,
+      "foreignKeys": [],
+      "indexes": [
+        "organizationId, createdAt"
+      ]
+    }
+  ],
+  "totalRecords": 67,
+  "foreignKeyRelationships": [
+    "Migration Order (respecting foreign keys):",
+    "1. users (no dependencies)",
+    "2. organizations (no dependencies)",
+    "3. user_organizations (depends on: users, organizations)",
+    "4. ai_providers (no dependencies)",
+    "5. organization_ai_configs (depends on: organizations)",
+    "6. ai_usage_logs (depends on: users)",
+    "7. api_configurations (depends on: organizations - nullable)",
+    "8. organization_api_credentials (depends on: organizations, api_configurations)",
+    "9. data_source_mappings (depends on: api_configurations)",
+    "10. field_configurations (depends on: organizations - nullable)",
+    "11. pfa_records (depends on: organizations)",
+    "12. sync_logs (no dependencies)"
+  ],
+  "warnings": [
+    "⚠️  Encrypted fields detected (apiKeyEncrypted, authKeyEncrypted, authValueEncrypted)",
+    "    → Verify encryption keys are consistent between SQLite and PostgreSQL environments",
+    "⚠️  JSON string fields detected (availableModels, routingRules, customHeaders, fieldMappings, modifiedFields)",
+    "    → SQLite stores as TEXT, PostgreSQL can use native JSON type (current schema uses String)"
+  ]
+}

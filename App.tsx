@@ -19,6 +19,7 @@ import { OrgManager } from './components/admin/OrgManager';
 import { UserManager } from './components/admin/UserManager';
 import { ApiManager } from './components/admin/ApiManager';
 import { ApiConnectivity } from './components/admin/ApiConnectivity';
+import { DataSourceManager } from './components/admin/DataSourceManager';
 import { SystemManager } from './components/admin/SystemManager';
 import { DataImporter } from './components/admin/DataImporter';
 import { FieldConfigManager } from './components/admin/FieldConfigManager';
@@ -31,7 +32,7 @@ import { SyncLogsView } from './components/admin/SyncLogsView';
 
 import { User, Organization, PfaRecord, FilterState, Scale, SeriesVisibility, DisplayMetric, GridColumn, ColorConfig, DataExchangeConfig, ApiConfig, SystemConfig, AssetMasterRecord, ClassificationRecord, DataCategory, DorRecord, SourceRecord, ManufacturerRecord, ModelRecord } from './types';
 import { STATIC_PFA_RECORDS, STATIC_ASSET_MASTER, STATIC_CLASSIFICATION, STATIC_DORS, STATIC_SOURCES, STATIC_MANUFACTURERS, STATIC_MODELS } from './mockData';
-import { PanelLeftOpen, Plus, Undo2, Redo2, Check, Trash2, AlertTriangle, RefreshCw, Loader2, Sparkles, Mic, X, Save, Brain, Send, Activity, FileSpreadsheet, Database, FileDown, PanelLeftClose, LogOut, Shield, LayoutGrid, Table, Building2, Plug, Settings, Monitor, Tag, Layers, FileText, Users, Blocks, Box, Factory, Truck, ScrollText } from 'lucide-react';
+import { PanelLeftOpen, Plus, Undo2, Redo2, Check, Trash2, AlertTriangle, RefreshCw, Loader2, Sparkles, Mic, X, Save, Brain, Send, Activity, FileSpreadsheet, Database, FileDown, PanelLeftClose, LogOut, Shield, LayoutGrid, Table, Building2, Plug, Settings, Monitor, Tag, Layers, FileText, Users, Blocks, Box, Factory, Truck, ScrollText, Network } from 'lucide-react';
 import { getTimelineBounds, getDaysDiff } from './utils';
 import { apiClient } from './services/apiClient';
 
@@ -750,6 +751,7 @@ const App: React.FC = () => {
                         <>
                             <MenuHeader label="Administration" />
                             <MenuItem label="API Connectivity" icon={Plug} active={appMode === 'api-connectivity'} onClick={() => setAppMode('api-connectivity')} />
+                            <MenuItem label="Data Source Mappings" icon={Network} active={appMode === 'data-source-mappings'} onClick={() => setAppMode('data-source-mappings')} />
                             <MenuItem label="Data Import" icon={Database} active={appMode === 'data-import'} onClick={() => setAppMode('data-import')} />
                             <MenuItem label="Field Configuration" icon={FileDown} active={appMode === 'field-config'} onClick={() => setAppMode('field-config')} />
                             <MenuItem label="Organization" icon={Building2} active={appMode === 'organization'} onClick={() => setAppMode('organization')} />
@@ -948,6 +950,9 @@ const App: React.FC = () => {
                     )}
                     {appMode === 'api-connectivity' && (
                         <ApiConnectivity />
+                    )}
+                    {appMode === 'data-source-mappings' && (
+                        <DataSourceManager />
                     )}
                     {appMode === 'data-import' && (
                         <DataImporter onImportExcel={handleDataImport} config={exportConfig} assets={allPfaRef.current} />

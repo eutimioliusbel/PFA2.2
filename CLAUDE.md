@@ -1,35 +1,103 @@
-# CLAUDE.md
+# CLAUDE.md - AI Assistant Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> **Purpose**: Comprehensive guidance for AI assistants working on the PFA Vanguard codebase. Read this first before making any code changes.
 
-> **⚠️ CRITICAL: Before making any changes to this codebase, read these standards:**
->
-> 📖 **[Documentation Standards](./docs/DOCUMENTATION_STANDARDS.md)** - How we document and commit code
-> - When to commit (before major changes, after functionality works)
-> - README.md maintenance (must always reflect current functionality)
-> - Git/GitHub best practices (commit messages, branch naming, PR templates)
->
-> 💻 **[Coding Standards](./docs/CODING_STANDARDS.md)** - How we write enterprise-grade code
-> - TypeScript strict mode, no `any`, explicit return types
-> - 20-line function rule
-> - React patterns (functional components, hooks, performance)
-> - Backend patterns (service layer, error handling, validation)
-> - Security practices (input validation, secrets management)
->
-> **All agents and development sessions MUST follow these standards.**
+---
+
+## 🚀 AI Assistant Quick Start (READ THIS FIRST)
+
+### Critical Rules - Never Violate These
+
+| Rule | Why | Consequence |
+|------|-----|-------------|
+| **1. Read [DOCUMENTATION_STANDARDS.md](./docs/DOCUMENTATION_STANDARDS.md) before first commit** | Defines commit timing, README maintenance, git workflow | Improper commits, broken git history |
+| **2. Read [CODING_STANDARDS.md](./docs/CODING_STANDARDS.md) before writing code** | TypeScript strict mode, 20-line rule, React patterns | Poor code quality, security issues |
+| **3. Never mutate `allPfaRef` without `updatePfaRecords()` wrapper** | Breaks undo/redo history, doesn't trigger re-render | UI desync, lost undo capability |
+| **4. Always use `apiClient` service for API calls** | Handles JWT token with correct localStorage key | 401 errors, auth failures |
+| **5. Commit BEFORE major refactoring, AFTER functionality works** | Safety checkpoint + working code in git | Lost work, broken history |
+| **6. Update README.md when functionality changes** | Users must see current features | Outdated documentation |
+| **7. Use `temp/` folder for all temporary files** | Prevents codebase clutter | Messy repository |
+
+### Common Gotchas
+
+```typescript
+// ❌ WRONG - Direct ref mutation
+allPfaRef.current = allPfaRef.current.map(a => ({ ...a, category: 'New' }));
+
+// ✅ CORRECT - Use updatePfaRecords wrapper
+updatePfaRecords(prev => prev.map(a => ({ ...a, category: 'New' })));
+
+// ❌ WRONG - Manual fetch with wrong token key
+const token = localStorage.getItem('token'); // Wrong key!
+
+// ✅ CORRECT - Use apiClient service
+const data = await apiClient.syncPemsData(organizationId, 'full');
+
+// ❌ WRONG - Admin menu in AdminDashboard.tsx
+<AdminDashboard onAddMenuItem={...} /> // Wrong location
+
+// ✅ CORRECT - Admin menu in App.tsx
+<MenuItem label="Feature" icon={Icon} onClick={() => setAppMode('feature')} />
+```
+
+### Quick Navigation
+
+| I need to... | See this section |
+|--------------|------------------|
+| Understand the domain (PFA = Plan/Forecast/Actuals) | [Essential Domain Concepts](#essential-domain-concepts) |
+| Learn sandbox pattern (refs + undo/redo) | [Critical Architecture Patterns](#critical-architecture-patterns) |
+| Find a specific component or service | [Key Files](#key-files) |
+| Add a field, filter, or bulk operation | [Common Tasks](#common-tasks) |
+| Understand PEMS sync and database architecture | [PEMS Data Synchronization](#pems-data-synchronization) |
+| Fix a bug or performance issue | [Known Issues](#known-issues) |
+| Prepare for production deploy | [Production Checklist](#production-checklist) |
+| Create scripts or tests | [Temporal Files, Scripts & Test Organization](#temporal-files-scripts--test-organization) |
+
+---
+
+## 📖 Documentation Standards
+
+> **⚠️ MANDATORY: Read these before making any changes**
+
+**[Documentation Standards](./docs/DOCUMENTATION_STANDARDS.md)** - Git workflow, commit conventions, README maintenance
+- **Section 11**: When to commit (before major changes, after functionality works)
+- **Section 12**: README.md maintenance rules (must always reflect current features)
+- **Section 17**: Temporal files (`temp/`), script naming, test organization
+
+**[Coding Standards](./docs/CODING_STANDARDS.md)** - Enterprise-grade code quality
+- **Section 3**: TypeScript standards (strict mode, no `any`, explicit return types)
+- **Section 5**: React patterns (functional components, hooks, 20-line function rule)
+- **Section 8**: Backend patterns (service layer, error handling, validation)
+- **Section 11**: Security practices (input validation, secrets management)
+
+**All agents and development sessions MUST follow these standards.**
+
+---
 
 ## Table of Contents
 
-1. [Quick Start](#quick-start)
+### 🎯 Essential Reading
+1. [AI Assistant Quick Start](#-ai-assistant-quick-start-read-this-first) ← Start here
 2. [Project Overview](#project-overview)
 3. [Essential Domain Concepts](#essential-domain-concepts)
 4. [Critical Architecture Patterns](#critical-architecture-patterns)
+
+### 📂 Implementation Guide
 5. [Key Files](#key-files)
-6. [Common Tasks](#common-tasks)
-7. [Known Issues](#known-issues)
-8. [Production Checklist](#production-checklist)
-9. [Git & GitHub Best Practices](#git--github-best-practices)
-10. [Temporal Files, Scripts & Test Organization](#temporal-files-scripts--test-organization)
+6. [Project Folder Structure](#project-folder-structure)
+7. [Common Tasks](#common-tasks)
+8. [Temporal Files, Scripts & Test Organization](#temporal-files-scripts--test-organization)
+
+### 🔧 Operations & Deployment
+9. [PEMS Data Synchronization](#pems-data-synchronization)
+10. [Authentication & Security](#authentication--security)
+11. [Known Issues](#known-issues)
+12. [Production Checklist](#production-checklist)
+13. [Git & GitHub Best Practices](#git--github-best-practices)
+
+### 🎨 Design & Testing
+14. [Visual Development & Testing](#visual-development--testing)
+15. [External Resources](#external-resources)
 
 ## Quick Start
 
@@ -77,6 +145,53 @@ npm run dev
 
 **Data Scale**: 20,280 PFA records + 3,735 asset master records
 
+---
+
+### 🧠 Mental Model - System Architecture at a Glance
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  USER WORKFLOW: PM needs to adjust equipment forecast dates     │
+│  to keep project under budget                                   │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  FRONTEND (React + TypeScript)                                  │
+│  ├─ App.tsx: Sandbox pattern (allPfaRef + undo/redo)           │
+│  ├─ Timeline.tsx: Drag-and-drop Gantt chart                     │
+│  ├─ CommandDeck.tsx: Bulk operations (shift dates, change DOR)  │
+│  └─ FilterPanel.tsx: Reduce 20K records to relevant subset      │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  BACKEND (Express.js + Prisma)                                  │
+│  ├─ JWT Authentication (token in localStorage as 'pfa_auth_token') │
+│  ├─ PemsSyncService: Bi-directional sync with PEMS Grid API    │
+│  ├─ DataSourceOrchestrator: API switching with fallback        │
+│  └─ PostgreSQL: 1M+ PFA records with change tracking           │
+└─────────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  EXTERNAL SYSTEMS                                               │
+│  ├─ PEMS (HxGN EAM): Source of truth for equipment data        │
+│  ├─ AI Providers: Gemini/OpenAI/Claude for natural language    │
+│  └─ ESS/Procurement: Future integrations for Plan/Actuals      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Architecture Decisions**:
+- **Sandbox Pattern**: Dual-ref (allPfaRef + baselinePfaRef) enables 20-level undo without re-render spam
+- **State Tracking**: Database tracks `syncState` (pristine/modified/pending_sync) for bi-directional sync
+- **Organization Isolation**: Multi-tenant with `organizationId` filtering on all queries
+- **Drag-and-Drop**: `dragOverrides` Map for live preview without data mutation until drop
+
+**Critical Data Flow**:
+```
+PEMS Read API → Database (pristine) → User Edit → allPfaRef (modified) → Commit → Database → PEMS Write API
+```
+
+---
+
 ## Essential Domain Concepts
 
 ### PFA = Plan, Forecast, Actuals
@@ -119,6 +234,20 @@ ACTUAL (actualStart/End) ← Billing reality (imported from Procurement)
 See `utils.ts: calculateCost()` for implementation.
 
 ## Critical Architecture Patterns
+
+> **🎯 Purpose**: These patterns solve core business problems and are used throughout the codebase. Understanding these is essential for making effective code changes.
+
+**Quick Reference**:
+
+| Pattern | Problem Solved | Key Files | Critical Rule |
+|---------|----------------|-----------|---------------|
+| **Sandbox** | Experiment without affecting production data | App.tsx | Never mutate `allPfaRef` directly |
+| **Smart Bulk Ops** | Different logic for Forecast vs. Actual | CommandDeck.tsx | Can't move actual start dates backward |
+| **Drag Preview** | Smooth multi-item drag without mutation | Timeline.tsx | Use `dragOverrides` Map |
+| **Multi-Org Isolation** | Multiple projects in one system | App.tsx, backend | Filter by `organizationId` |
+| **Dynamic Forms** | Rental vs. Purchase fields differ | Various components | Conditional rendering on `source` |
+
+---
 
 ### 1. Sandbox Pattern (Simulation Mode)
 
@@ -444,7 +573,34 @@ PFA2.2/
 
 ## PEMS Data Synchronization
 
+> **🎯 Purpose**: Bi-directional sync between PFA Vanguard and PEMS (HxGN EAM) for 1M+ equipment records across multiple organizations.
+
 **PFA Vanguard** integrates with **PEMS Grid Data API** (HxGN EAM) to synchronize PFA records, asset master data, and classification data from external construction management systems.
+
+**What You Need to Know**:
+
+| Aspect | Current State | Key Detail |
+|--------|---------------|------------|
+| **Read Sync** | ✅ Working | Fetch from PEMS → Store in PostgreSQL with change tracking |
+| **Write Sync** | 📋 Planned | Modified records → Push to PEMS (not yet implemented) |
+| **Scale** | 1M+ records | Batch processing: 10K API calls, 1K DB writes |
+| **Authentication** | JWT + apiClient | **Critical**: Use `apiClient` service, not manual `fetch()` |
+| **Progress Tracking** | Real-time | Frontend polls every 2 seconds for status updates |
+| **Database Architecture** | 3-tier hybrid | PostgreSQL + Redis (planned) + React state |
+
+**Critical Files**:
+- `backend/src/services/pems/PemsSyncService.ts` - Batch sync logic (read)
+- `backend/src/services/pems/PemsWriteService.ts` - Write sync (planned)
+- `backend/src/controllers/pemsSyncController.ts` - API endpoints
+- `components/admin/ApiConnectivity.tsx` - Sync UI
+- `services/apiClient.ts` - HTTP client with JWT handling
+
+**Common Issues**:
+- ❌ 401 errors → Using wrong localStorage key or manual `fetch()`
+- ❌ Sync button not visible → `feeds` field is NULL in database
+- ❌ Performance issues → Adjust `PAGE_SIZE` or `BATCH_SIZE`
+
+---
 
 ### Sync Architecture
 
@@ -788,6 +944,21 @@ Deletes all PFA records from database before full sync. Useful for testing sync 
 
 ## Common Tasks
 
+> **🎯 Purpose**: Step-by-step instructions for the most common code changes. Follow these checklists to ensure you don't miss critical steps.
+
+**Quick Reference**:
+
+| Task | Primary Files | Steps | Critical Warning |
+|------|---------------|-------|------------------|
+| **Add PFA Field** | types.ts, App.tsx | 1. Update interface<br>2. Update cloneAssets()<br>3. Add to export config<br>4. Add grid column | Must update `cloneAssets()` for non-primitive fields |
+| **Add Filter** | types.ts, App.tsx, FilterPanel.tsx | 1. Update FilterState<br>2. Update createDefaultFilters()<br>3. Add UI control<br>4. Update filter logic | Filter logic is in App.tsx useEffect (line ~297-346) |
+| **Add Bulk Op** | CommandDeck.tsx | 1. Add button<br>2. Call onUpdateAssets()<br>3. Enforce business rules | Can't move actual start dates backward |
+| **Add Admin Menu** | App.tsx (NOT AdminDashboard.tsx) | 1. Import icon<br>2. Add MenuItem<br>3. Import component<br>4. Add render logic | Menu is in App.tsx, not AdminDashboard.tsx |
+| **Debug Drag-Drop** | Timeline.tsx | 1. Check dragOverrides Map<br>2. Verify onUpdateAssets call<br>3. Check updatePfaRecords() | Use dragOverrides Map for preview, not direct mutation |
+| **Fix Cost Calc** | utils.ts | 1. Check source field<br>2. Verify calculateCost()<br>3. Check aggregateCosts() | Rental: (days/30.44) × monthlyRate<br>Purchase: purchasePrice only |
+
+---
+
 ### Add a New PfaRecord Field
 
 1. Update `PfaRecord` interface in `types.ts`
@@ -1090,7 +1261,7 @@ Related:
 Updated:
 - README.md
 - docs/DEVELOPMENT_LOG.md
-- docs/API.md
+- docs/backend/API_REFERENCE.md
 ```
 
 **Types:** `[FEAT]`, `[FIX]`, `[REFACTOR]`, `[DOCS]`, `[TEST]`, `[CHORE]`, `[PERF]`, `[SECURITY]`, `[RELEASE]`

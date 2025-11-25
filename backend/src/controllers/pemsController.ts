@@ -7,6 +7,7 @@
 import { Request, Response } from 'express';
 import { getPrismaClient } from '../config/database';
 import { PemsApiService } from '../services/pems/PemsApiService';
+import { PemsSyncService } from '../services/pems/PemsSyncService';
 import { logger } from '../utils/logger';
 
 const prisma = getPrismaClient();
@@ -82,20 +83,33 @@ export const testPemsConnection = async (req: Request, res: Response) => {
       });
     }
 
-    const pemsService = new PemsApiService();
+    // Get API configuration to use same credentials as sync
+    const apiConfig = await prisma.apiConfiguration.findFirst({
+      where: {
+        usage: 'PEMS_PFA_READ',
+        operationType: 'read'
+      }
+    });
+
+    if (!apiConfig) {
+      return res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'PEMS PFA Read API configuration not found'
+      });
+    }
+
+    const pemsSync = new PemsSyncService();
     const startTime = Date.now();
 
     try {
-      // Try to fetch a small amount of data to test connection
-      const testData = await pemsService.fetchPfaData(org.code, 0, 10);
+      // Use syncPfaData to test (it will use database credentials)
+      const result = await pemsSync.syncPfaData(organizationId, 'full', `test-${Date.now()}`, apiConfig.id);
       const latencyMs = Date.now() - startTime;
 
       // Update config status
       await prisma.apiConfiguration.updateMany({
         where: {
-          organizationId,
-          usage: 'PFA',
-          operationType: 'read'
+          id: apiConfig.id
         },
         data: {
           status: 'connected',
@@ -107,9 +121,9 @@ export const testPemsConnection = async (req: Request, res: Response) => {
       res.json({
         success: true,
         status: 'connected',
-        recordsFetched: testData.length,
+        recordsFetched: result.totalRecords,
         latencyMs,
-        message: `Successfully connected to PEMS API. Retrieved ${testData.length} test records.`
+        message: `Successfully connected to PEMS API. Retrieved ${result.totalRecords} test records.`
       });
     } catch (error: any) {
       // Update config with error

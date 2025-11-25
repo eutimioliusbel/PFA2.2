@@ -131,42 +131,18 @@ async function main() {
   console.log('  Default password for all users: password123\n');
 
   // ============================================================================
-  // 2. Create Organizations
+  // 2. Create Organizations (Only RIO and PORTARTHUR)
   // ============================================================================
 
   console.log('🏢 Creating organizations...');
-
-  const holngOrg = await prisma.organization.upsert({
-    where: { code: 'HOLNG' },
-    update: {},
-    create: {
-      code: 'HOLNG',
-      name: 'Houston LNG Project',
-      description: 'Large-scale LNG facility construction project',
-      logoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=HOLNG&backgroundColor=3b82f6',
-      isActive: true,
-    },
-  });
-
-  const globalOrg = await prisma.organization.upsert({
-    where: { code: 'PEMS_Global' },
-    update: {},
-    create: {
-      code: 'PEMS_Global',
-      name: 'Global PEMS Organization',
-      description: 'System-wide organization for testing and development',
-      logoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=PEMS_Global&backgroundColor=10b981',
-      isActive: true,
-    },
-  });
 
   const rioOrg = await prisma.organization.upsert({
     where: { code: 'RIO' },
     update: {},
     create: {
       code: 'RIO',
-      name: 'RIO',
-      description: 'RIO',
+      name: 'Rio Tinto Project',
+      description: 'Rio Tinto construction project',
       logoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=RIO&backgroundColor=f59e0b',
       isActive: true,
     },
@@ -177,15 +153,13 @@ async function main() {
     update: {},
     create: {
       code: 'PORTARTHUR',
-      name: 'PORTARTHUR',
-      description: 'PORTARTHUR',
+      name: 'Port Arthur Project',
+      description: 'Port Arthur LNG construction project',
       logoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=PORTARTHUR&backgroundColor=8b5cf6',
       isActive: true,
     },
   });
 
-  console.log(`✓ Created organization: ${holngOrg.name} (${holngOrg.code})`);
-  console.log(`✓ Created organization: ${globalOrg.name} (${globalOrg.code})`);
   console.log(`✓ Created organization: ${rioOrg.name} (${rioOrg.code})`);
   console.log(`✓ Created organization: ${portArthurOrg.name} (${portArthurOrg.code})\n`);
 
@@ -194,36 +168,6 @@ async function main() {
   // ============================================================================
 
   console.log('🔗 Linking admin to organizations...');
-
-  await prisma.userOrganization.upsert({
-    where: {
-      userId_organizationId: {
-        userId: adminUser.id,
-        organizationId: holngOrg.id,
-      },
-    },
-    update: {},
-    create: {
-      userId: adminUser.id,
-      organizationId: holngOrg.id,
-      role: 'owner',
-    },
-  });
-
-  await prisma.userOrganization.upsert({
-    where: {
-      userId_organizationId: {
-        userId: adminUser.id,
-        organizationId: globalOrg.id,
-      },
-    },
-    update: {},
-    create: {
-      userId: adminUser.id,
-      organizationId: globalOrg.id,
-      role: 'owner',
-    },
-  });
 
   await prisma.userOrganization.upsert({
     where: {
@@ -255,35 +199,50 @@ async function main() {
     },
   });
 
-  console.log(`✓ Admin linked to ${holngOrg.code}`);
-  console.log(`✓ Admin linked to ${globalOrg.code}`);
   console.log(`✓ Admin linked to ${rioOrg.code}`);
   console.log(`✓ Admin linked to ${portArthurOrg.code}\n`);
 
   // ============================================================================
-  // Link Users to HOLNG Organization
+  // Link Users to Organizations
   // ============================================================================
 
   console.log('🔗 Linking users to organizations...');
 
   const users = [rickRector, ubiRosa, calvinHurford, tonyEstrada, steveBryson];
 
+  // Link users to both RIO and PORTARTHUR
   for (const user of users) {
     await prisma.userOrganization.upsert({
       where: {
         userId_organizationId: {
           userId: user.id,
-          organizationId: holngOrg.id,
+          organizationId: rioOrg.id,
         },
       },
       update: {},
       create: {
         userId: user.id,
-        organizationId: holngOrg.id,
+        organizationId: rioOrg.id,
         role: 'member',
       },
     });
-    console.log(`✓ ${user.username} linked to ${holngOrg.code}`);
+    console.log(`✓ ${user.username} linked to ${rioOrg.code}`);
+
+    await prisma.userOrganization.upsert({
+      where: {
+        userId_organizationId: {
+          userId: user.id,
+          organizationId: portArthurOrg.id,
+        },
+      },
+      update: {},
+      create: {
+        userId: user.id,
+        organizationId: portArthurOrg.id,
+        role: 'member',
+      },
+    });
+    console.log(`✓ ${user.username} linked to ${portArthurOrg.code}`);
   }
 
   console.log('');
@@ -372,10 +331,10 @@ async function main() {
   console.log('⚙️  Creating organization AI configurations...');
 
   await prisma.organizationAiConfig.upsert({
-    where: { organizationId: holngOrg.id },
+    where: { organizationId: rioOrg.id },
     update: {},
     create: {
-      organizationId: holngOrg.id,
+      organizationId: rioOrg.id,
       enabled: true,
       accessLevel: 'full-access',
       primaryProviderId: geminiProvider.id,
@@ -391,16 +350,16 @@ async function main() {
   });
 
   await prisma.organizationAiConfig.upsert({
-    where: { organizationId: globalOrg.id },
+    where: { organizationId: portArthurOrg.id },
     update: {},
     create: {
-      organizationId: globalOrg.id,
+      organizationId: portArthurOrg.id,
       enabled: true,
       accessLevel: 'full-access',
       primaryProviderId: geminiProvider.id,
       fallbackProviderIds: JSON.stringify([]),
-      dailyLimitUsd: 5.00,
-      monthlyLimitUsd: 50.00,
+      dailyLimitUsd: 10.00,
+      monthlyLimitUsd: 100.00,
       alertThresholdPercent: 80,
       maxContextRecords: 50,
       includeHistoricalData: false,
@@ -409,8 +368,8 @@ async function main() {
     },
   });
 
-  console.log(`✓ AI config created for ${holngOrg.code} (daily: $10, monthly: $100)`);
-  console.log(`✓ AI config created for ${globalOrg.code} (daily: $5, monthly: $50)\n`);
+  console.log(`✓ AI config created for ${rioOrg.code} (daily: $10, monthly: $100)`);
+  console.log(`✓ AI config created for ${portArthurOrg.code} (daily: $10, monthly: $100)\n`);
 
   // ============================================================================
   // 6. Create Global PEMS API Configurations (System-Wide, Admin-Only)
@@ -486,10 +445,28 @@ async function main() {
     },
   });
 
+  // PEMS Organizations API - organization endpoint to fetch available organizations
+  await prisma.apiConfiguration.upsert({
+    where: { id: 'pems-global-organizations' },
+    update: {},
+    create: {
+      id: 'pems-global-organizations',
+      organizationId: null,
+      name: 'PEMS - Organizations',
+      usage: 'PEMS_ORGANIZATIONS',
+      url: 'https://us1.eam.hxgnsmartcloud.com:443/axis/restservices/organization',
+      authType: 'basic',
+      operationType: 'read',
+      feeds: JSON.stringify([{ entity: 'organizations', views: ['Admin Dashboard'] }]),
+      status: 'untested',
+    },
+  });
+
   console.log(`✓ PEMS PFA Read  (griddata endpoint)`);
   console.log(`✓ PEMS PFA Write (UserDefinedScreenService)`);
   console.log(`✓ PEMS Assets    (equipment/assets)`);
-  console.log(`✓ PEMS Classes   (equipment/categories)\n`);
+  console.log(`✓ PEMS Classes   (equipment/categories)`);
+  console.log(`✓ PEMS Organizations (organization endpoint)\n`);
 
   // ============================================================================
   // 7. Create Global AI Provider API Configurations (Templates)
@@ -634,6 +611,61 @@ async function main() {
   console.log(`✓ Default field configuration created\n`);
 
   // ============================================================================
+  // 7. Seed Data Source Mappings
+  // ============================================================================
+
+  console.log('🔗 Creating data source mappings...');
+
+  // Get all API configurations with feeds
+  const apiConfigs = await prisma.apiConfiguration.findMany({
+    where: { feeds: { not: null } }
+  });
+
+  let mappingsCreated = 0;
+  let mappingsSkipped = 0;
+
+  for (const config of apiConfigs) {
+    try {
+      const feeds = JSON.parse(config.feeds!);
+
+      for (const feed of feeds) {
+        const entityType = feed.entity;
+
+        // Check if mapping already exists
+        const existing = await prisma.dataSourceMapping.findFirst({
+          where: {
+            entityType,
+            organizationId: config.organizationId,
+            priority: 1
+          }
+        });
+
+        if (existing) {
+          mappingsSkipped++;
+          continue;
+        }
+
+        // Create new mapping
+        await prisma.dataSourceMapping.create({
+          data: {
+            entityType,
+            organizationId: config.organizationId,
+            apiConfigId: config.id,
+            priority: 1,
+            isActive: true
+          }
+        });
+
+        mappingsCreated++;
+      }
+    } catch (error) {
+      console.error(`   ⚠️  Error processing ${config.name}:`, error);
+    }
+  }
+
+  console.log(`✓ Data source mappings created: ${mappingsCreated} new, ${mappingsSkipped} existing\n`);
+
+  // ============================================================================
   // Summary
   // ============================================================================
 
@@ -642,10 +674,11 @@ async function main() {
   console.log('📋 Summary:');
   console.log('───────────────────────────────────────────────────────────');
   console.log(`   Users:                    6 (admin + 5 users)`);
-  console.log(`   Organizations:            4 (HOLNG, PEMS_Global, RIO, PORTARTHUR)`);
-  console.log(`   Global PEMS APIs:         4 (Read/Write PFA, Assets, Classes)`);
+  console.log(`   Organizations:            2 (RIO, PORTARTHUR)`);
+  console.log(`   Global PEMS APIs:         5 (PFA Read/Write, Assets, Classes, Orgs)`);
   console.log(`   Global AI API Templates:  5 (Gemini, OpenAI, Claude, Azure, Grok)`);
   console.log(`   AI Providers:             3 (Gemini enabled, OpenAI/Claude disabled)`);
+  console.log(`   Data Source Mappings:     ${mappingsCreated + mappingsSkipped} (API→Entity links)`);
   console.log(`   Field Configurations:     1 (Standard PFA Export)`);
   console.log('═══════════════════════════════════════════════════════════');
   console.log('');

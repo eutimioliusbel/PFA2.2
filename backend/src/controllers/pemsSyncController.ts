@@ -7,6 +7,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { pemsSyncService, SyncProgress } from '../services/pems/PemsSyncService';
+import { DataSourceOrchestrator } from '../services/DataSourceOrchestrator';
 import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
@@ -91,8 +92,39 @@ export const startSync = async (req: Request, res: Response) => {
     };
     activeSyncs.set(syncId, initialProgress);
 
+    // Determine entity type from API configuration feeds
+    const config = await prisma.apiConfiguration.findUnique({
+      where: { id: apiConfigId }
+    });
+
+    if (!config) {
+      return res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'API configuration not found'
+      });
+    }
+
+    // Parse feeds to determine entity type
+    let entityType = 'pfa'; // default
+    if (config.feeds) {
+      try {
+        const feeds = JSON.parse(config.feeds);
+        if (feeds && feeds.length > 0) {
+          entityType = feeds[0].entity;
+        }
+      } catch (e) {
+        logger.warn('Failed to parse feeds, defaulting to PFA:', e);
+      }
+    }
+
+    logger.info(`Starting ${entityType} sync for organization ${organizationId} using data source orchestrator`);
+
+    // Use DataSourceOrchestrator for configurable API-to-entity mapping
+    const orchestrator = new DataSourceOrchestrator();
+    const syncPromise = orchestrator.executeSync(entityType, organizationId, syncType, syncId);
+
     // Start sync in background (don't await)
-    pemsSyncService.syncPfaData(organizationId, syncType, syncId, apiConfigId)
+    syncPromise
       .then(async (progress) => {
         // Update the sync entry with final results
         activeSyncs.set(progress.syncId, progress);
@@ -373,8 +405,29 @@ export const syncGlobalApi = async (req: Request, res: Response) => {
       };
       activeSyncs.set(syncId, initialProgress);
 
+      // Determine entity type from API config
+      const apiConfig = await prisma.apiConfiguration.findUnique({
+        where: { id: apiConfigId }
+      });
+
+      let entityType = 'pfa';
+      if (apiConfig?.feeds) {
+        try {
+          const feeds = JSON.parse(apiConfig.feeds);
+          if (feeds && feeds.length > 0) {
+            entityType = feeds[0].entity;
+          }
+        } catch (e) {
+          logger.warn('Failed to parse feeds:', e);
+        }
+      }
+
+      // Use DataSourceOrchestrator for configurable routing
+      const orchestrator = new DataSourceOrchestrator();
+      const syncPromise = orchestrator.executeSync(entityType, org.id, syncType, syncId);
+
       // Start sync in background
-      pemsSyncService.syncPfaData(org.id, syncType, syncId, apiConfigId)
+      syncPromise
         .then(async (progress) => {
           activeSyncs.set(progress.syncId, progress);
 
@@ -525,8 +578,25 @@ export const syncOrgApis = async (req: Request, res: Response) => {
       };
       activeSyncs.set(syncId, initialProgress);
 
+      // Determine entity type from feeds
+      let entityType = 'pfa';
+      if (apiConfig.feeds) {
+        try {
+          const feeds = JSON.parse(apiConfig.feeds);
+          if (feeds && feeds.length > 0) {
+            entityType = feeds[0].entity;
+          }
+        } catch (e) {
+          logger.warn('Failed to parse feeds:', e);
+        }
+      }
+
+      // Use DataSourceOrchestrator for configurable routing
+      const orchestrator = new DataSourceOrchestrator();
+      const syncPromise = orchestrator.executeSync(entityType, organizationId, syncType, syncId);
+
       // Start sync in background
-      pemsSyncService.syncPfaData(organizationId, syncType, syncId, apiConfig.id)
+      syncPromise
         .then(async (progress) => {
           activeSyncs.set(progress.syncId, progress);
 

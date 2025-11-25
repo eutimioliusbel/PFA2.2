@@ -32,6 +32,26 @@ backend/prisma/*.db
 backend/prisma/*.db-journal
 backend/dev.db
 
+# PostgreSQL - Local development
+database/backups/**
+database/logs/**
+!database/backups/.gitkeep
+!database/logs/.gitkeep
+
+# PostgreSQL - SSL Certificates (NEVER commit private keys!)
+database/ssl/*.key
+database/ssl/*.pem
+!database/ssl/ca-cert.pem
+!database/ssl/server.crt
+database/ssl/*.csr
+database/ssl/*.srl
+
+# PostgreSQL - Temporary files
+database/temp/**
+*.sql
+*.sql.gz
+!database/init-scripts/*.sql
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -46,3 +66,13 @@ backend/dev.db
 # OS
 Thumbs.db
 .DS_Store
+
+# Windows reserved names
+NUL
+nul
+backend/nul
+backend/token.txt
+
+# Test/example data
+pems_apis_examples/
+ps/

@@ -5,9 +5,9 @@ generator client {
 }
 
 datasource db {
-  // SQLite for development (easy setup, no server required)
-  // For production, change to: provider = "postgresql"
-  provider = "sqlite"
+  // PostgreSQL for production (required for JSONB, generated columns, materialized views)
+  // For development: Use Docker PostgreSQL or SQLite (limited features)
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -31,6 +31,10 @@ model User {
 
   // AI Usage tracking
   aiUsageLogs           AiUsageLog[]
+
+  // PFA Modifications (Mirror + Delta)
+  pfaModifications      PfaModification[]
+  pfaSyncLogs           PfaSyncLog[]
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -59,8 +63,13 @@ model Organization {
   // Field Configurations
   fieldConfigurations   FieldConfiguration[]
 
-  // PFA Data
+  // PFA Data (Legacy - to be migrated to PfaMirror)
   pfaRecords            PfaRecord[]
+
+  // PFA Mirror + Delta Architecture
+  pfaMirrors            PfaMirror[] @relation("PfaMirrorToOrganization")
+  pfaModifications      PfaModification[] @relation("PfaModificationToOrganization")
+  pfaSyncLogs           PfaSyncLog[] @relation("PfaSyncLogToOrganization")
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -441,4 +450,142 @@ model SyncLog {
 
   @@index([organizationId, createdAt])
   @@map("sync_logs")
+}
+
+// ============================================================================
+// PFA MIRROR + DELTA ARCHITECTURE (PostgreSQL Only)
+// ============================================================================
+
+// PFA Mirror: Read-only cached data from PEMS (1M+ records)
+// Uses JSONB with generated columns for fast indexing
+model PfaMirror {
+  id                    String    @id @default(uuid())
+  organizationId        String
+
+  // Core JSONB Storage (Full PFA record from PEMS)
+  data                  Json      // Prisma maps to JSONB in PostgreSQL
+
+  // Generated Columns (Extracted from JSONB for indexing)
+  // NOTE: These are defined in migration SQL as GENERATED ALWAYS STORED
+  // Prisma doesn't support generated columns syntax, so we mark as optional
+  pfaId                 String?
+  category              String?
+  class                 String?
+  source                String?
+  dor                   String?
+  areaSilo              String?
+  manufacturer          String?
+  model                 String?
+  monthlyRate           Float?
+  purchasePrice         Float?
+  forecastStart         DateTime?
+  forecastEnd           DateTime?
+  originalStart         DateTime?
+  originalEnd           DateTime?
+  actualStart           DateTime?
+  actualEnd             DateTime?
+  isActualized          Boolean?
+  isDiscontinued        Boolean?
+  isFundsTransferable   Boolean?
+  hasPlan               Boolean?
+  hasActuals            Boolean?
+
+  // Sync Tracking
+  pemsVersion           String?
+  lastSyncedAt          DateTime?
+  syncBatchId           String?
+
+  // Relationships
+  organization          Organization @relation("PfaMirrorToOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  modifications         PfaModification[]
+
+  // Row Metadata
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([organizationId, pfaId], name: "pfa_mirror_org_pfa_unique")
+  @@index([organizationId])
+  @@index([organizationId, category, source])
+  @@index([organizationId, forecastStart, forecastEnd])
+  @@index([syncBatchId, lastSyncedAt])
+  @@map("pfa_mirror")
+}
+
+// PFA Modification: User draft changes (delta storage)
+model PfaModification {
+  id                    String    @id @default(uuid())
+  mirrorId              String
+  organizationId        String
+  userId                String
+
+  // Delta Storage (Only changed fields)
+  delta                 Json      @default("{}")
+
+  // Session Management
+  sessionId             String?
+  syncState             String    @default("draft")  // draft, committed, syncing, synced, conflict
+
+  // Optimistic Locking
+  baseVersion           Int       @default(1)
+  currentVersion        Int       @default(1)
+
+  // Audit Trail
+  modifiedFields        Json?     // Array: ["forecastStart", "forecastEnd"]
+  changeReason          String?
+  committedAt           DateTime?
+
+  // Relationships
+  mirror                PfaMirror @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
+  organization          Organization @relation("PfaModificationToOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Row Metadata
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([mirrorId, sessionId, syncState])
+  @@index([organizationId, sessionId, syncState])
+  @@index([userId, sessionId, syncState])
+  @@index([organizationId, syncState, committedAt])
+  @@map("pfa_modification")
+}
+
+// PFA Sync Log: Background worker tracking (enhanced version)
+model PfaSyncLog {
+  id                    String    @id @default(uuid())
+  organizationId        String
+  triggeredByUserId     String?
+
+  // Sync Configuration
+  syncType              String    // full, incremental, manual
+  syncDirection         String    // read, write
+  batchId               String    @default(uuid())
+
+  // Progress Tracking
+  status                String    @default("running")  // running, completed, failed, cancelled
+  recordsTotal          Int       @default(0)
+  recordsProcessed      Int       @default(0)
+  recordsInserted       Int       @default(0)
+  recordsUpdated        Int       @default(0)
+  recordsDeleted        Int       @default(0)
+  recordsSkipped        Int       @default(0)
+  recordsErrored        Int       @default(0)
+
+  // Timing
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  durationMs            Int?
+
+  // Error Handling
+  errorMessage          String?
+  errorDetails          Json?
+
+  // Relationships
+  organization          Organization @relation("PfaSyncLogToOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  triggeredByUser       User?     @relation(fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, startedAt])
+  @@index([batchId])
+  @@index([triggeredByUserId, startedAt])
+  @@map("pfa_sync_log")
 }
