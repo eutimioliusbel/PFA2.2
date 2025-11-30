@@ -1,0 +1,115 @@
+config:
+  target: "http://localhost:3001"
+  plugins:
+    expect: {}
+  phases:
+    # Warm-up phase: Gradual ramp-up to avoid cold start penalties
+    - duration: 30
+      arrivalRate: 10
+      name: "Warm-up"
+    # Load phase: 200 concurrent users
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load - 200 concurrent users"
+    # Spike phase: Sudden traffic spike
+    - duration: 30
+      arrivalRate: 100
+      name: "Traffic spike"
+    # Cool-down phase
+    - duration: 30
+      arrivalRate: 10
+      name: "Cool-down"
+  payload:
+    path: "./test-credentials.json"
+    fields:
+      - "username"
+      - "password"
+  processor: "./processors/auth-processor.js"
+  variables:
+    baseUrl: "http://localhost:3001"
+
+scenarios:
+  - name: "Permission Check - PFA Read"
+    weight: 60
+    flow:
+      # Step 1: Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: token
+
+      # Step 2: Permission check via PFA read (triggers requirePermission middleware)
+      - get:
+          url: "/api/pfa?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403] # 200 if has permission, 403 if denied
+          capture:
+            - json: "$.error"
+              as: "errorType"
+
+      # Step 3: Repeat permission check (test caching/performance)
+      - get:
+          url: "/api/pfa?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+  - name: "Permission Check - Multiple Endpoints"
+    weight: 40
+    flow:
+      # Step 1: Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+          expect:
+            - statusCode: 200
+
+      # Step 2: Check multiple endpoints in sequence
+      - get:
+          url: "/api/pfa?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      - get:
+          url: "/api/servers?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      - get:
+          url: "/api/users/{{ username }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      # Step 3: Check organization status
+      - get:
+          url: "/api/organizations?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]

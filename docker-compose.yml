@@ -174,6 +174,53 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  # Redis Cache - For session management, caching, and queues
+  redis:
+    image: redis:7-alpine
+    container_name: pfa-redis
+    restart: unless-stopped
+
+    # Port mapping - only expose locally
+    ports:
+      - "127.0.0.1:6379:6379"
+
+    # Persistent volume for data
+    volumes:
+      - redis_data:/data
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    # Network isolation
+    networks:
+      - pfa-network
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+    # Redis configuration for persistence and security
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+      - "--maxmemory"
+      - "512mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-redis_dev_password}"
+
 networks:
   pfa-network:
     driver: bridge
@@ -185,4 +232,6 @@ volumes:
   postgres_data:
     driver: local
   pgadmin_data:
+    driver: local
+  redis_data:
     driver: local

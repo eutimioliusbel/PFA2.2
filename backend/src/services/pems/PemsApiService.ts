@@ -32,23 +32,15 @@ interface PemsGridRequest {
 
 export class PemsApiService {
   private readClient: AxiosInstance;
-  private writeClient: AxiosInstance;
 
   constructor() {
-    // Read client configuration
+    // Read client configuration (GridData API for bulk reads)
+    // NOTE: Write operations use PemsScreenService.ts (loads config from database)
     this.readClient = this.createClient({
       endpoint: env.PEMS_READ_ENDPOINT,
       username: env.PEMS_READ_USERNAME,
       password: env.PEMS_READ_PASSWORD,
       tenant: env.PEMS_READ_TENANT,
-    });
-
-    // Write client configuration (separate credentials/endpoint)
-    this.writeClient = this.createClient({
-      endpoint: env.PEMS_WRITE_ENDPOINT,
-      username: env.PEMS_WRITE_USERNAME,
-      password: env.PEMS_WRITE_PASSWORD,
-      tenant: env.PEMS_WRITE_TENANT,
     });
   }
 
@@ -151,9 +143,10 @@ export class PemsApiService {
       logger.info(`Fetched ${data.length} PFA records for ${organizationCode}`);
 
       return data;
-    } catch (error: any) {
-      logger.error(`Failed to fetch PFA data for ${organizationCode}:`, error.message);
-      throw new Error(`PEMS API Error: ${error.response?.data?.message || error.message}`);
+    } catch (error: unknown) {
+      const err = error as any;
+      logger.error(`Failed to fetch PFA data for ${organizationCode}:`, err.message);
+      throw new Error(`PEMS API Error: ${err.response?.data?.message || err.message}`);
     }
   }
 
@@ -194,37 +187,49 @@ export class PemsApiService {
 
   /**
    * Update PFA records in PEMS (WRITE operation)
+   * NOTE: This is a legacy method. For write operations, use PemsScreenService.ts instead.
+   * PemsScreenService uses the UserDefinedScreenService API (CUPFA2 screen) and
+   * loads configuration from the database (api_servers + api_endpoints tables).
    */
   async updatePfaRecords(
     organizationCode: string,
     records: any[]
   ): Promise<{ success: boolean; updated: number; errors: any[] }> {
-    try {
-      logger.info(`Updating ${records.length} PFA records for ${organizationCode}`);
+    // Import PemsScreenService dynamically to avoid circular dependencies
+    const { pemsScreenService } = await import('./PemsScreenService');
 
-      // TODO: Implement actual PEMS update API call
-      // This will depend on PEMS API specification for updates
+    const errors: Array<{ pfaId: string; error: string }> = [];
+    let updated = 0;
 
-      // For now, return mock response
-      logger.warn('PEMS write API not yet implemented');
+    logger.info(`Updating ${records.length} PFA records for ${organizationCode} via PemsScreenService`);
 
-      return {
-        success: true,
-        updated: records.length,
-        errors: [],
-      };
-    } catch (error: any) {
-      logger.error(`Failed to update PFA records for ${organizationCode}:`, error.message);
-      throw error;
+    for (const record of records) {
+      const result = await pemsScreenService.updatePfaRecord(
+        record.pfaId,
+        organizationCode,
+        record
+      );
+
+      if (result.success) {
+        updated++;
+      } else {
+        errors.push({ pfaId: record.pfaId, error: result.error || 'Unknown error' });
+      }
     }
+
+    return {
+      success: errors.length === 0,
+      updated,
+      errors,
+    };
   }
 
   /**
-   * Test connection to PEMS API
+   * Test connection to PEMS GridData API (bulk read)
+   * NOTE: For write connection tests, use PemsScreenService.testConnection()
    */
-  async testConnection(type: 'read' | 'write' = 'read'): Promise<{ success: boolean; latencyMs: number; error?: string }> {
+  async testConnection(): Promise<{ success: boolean; latencyMs: number; error?: string }> {
     const startTime = Date.now();
-    const client = type === 'read' ? this.readClient : this.writeClient;
 
     try {
       // Simple test request (fetch 1 record)
@@ -239,20 +244,21 @@ export class PemsApiService {
         REQUEST_TYPE: 'LIST.DATA_ONLY.STORED',
       };
 
-      await client.post('', testRequest);
+      await this.readClient.post('', testRequest);
 
       const latencyMs = Date.now() - startTime;
-      logger.info(`PEMS ${type} connection test successful: ${latencyMs}ms`);
+      logger.info(`PEMS GridData connection test successful: ${latencyMs}ms`);
 
       return { success: true, latencyMs };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as any;
       const latencyMs = Date.now() - startTime;
-      logger.error(`PEMS ${type} connection test failed:`, error.message);
+      logger.error(`PEMS GridData connection test failed:`, err.message);
 
       return {
         success: false,
         latencyMs,
-        error: error.response?.data?.message || error.message,
+        error: err.response?.data?.message || err.message,
       };
     }
   }

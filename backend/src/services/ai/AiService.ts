@@ -1,5 +1,8 @@
 import prisma from '../../config/database';
 import { GeminiAdapter } from './GeminiAdapter';
+import { OpenAIAdapter } from './OpenAIAdapter';
+import { AnthropicAdapter } from './AnthropicAdapter';
+import { AzureOpenAIAdapter } from './AzureOpenAIAdapter';
 import { IAiProvider, AiChatRequest, AiResponse } from './types';
 import { logger } from '../../utils/logger';
 import { decrypt } from '../../utils/encryption';
@@ -12,7 +15,7 @@ export class AiService {
   private async getProvider(organizationId: string): Promise<IAiProvider> {
     try {
       // Get organization's AI configuration
-      const aiConfig = await prisma.organizationAiConfig.findUnique({
+      const aiConfig = await prisma.organization_ai_configs.findUnique({
         where: { organizationId },
       });
 
@@ -36,7 +39,7 @@ export class AiService {
       }
 
       // Load provider from database
-      const provider = await prisma.aiProvider.findUnique({
+      const provider = await prisma.ai_providers.findUnique({
         where: { id: providerId },
       });
 
@@ -60,7 +63,34 @@ export class AiService {
             input: provider.pricingInput,
             output: provider.pricingOutput,
           });
-        // TODO: Add other providers (OpenAI, Anthropic, Azure)
+
+        case 'openai':
+          return new OpenAIAdapter(apiKey, provider.defaultModel, {
+            input: provider.pricingInput,
+            output: provider.pricingOutput,
+          });
+
+        case 'anthropic':
+          return new AnthropicAdapter(apiKey, provider.defaultModel, {
+            input: provider.pricingInput,
+            output: provider.pricingOutput,
+          });
+
+        case 'azure-openai':
+          if (!provider.apiEndpoint) {
+            throw new Error('Azure OpenAI requires apiEndpoint');
+          }
+          return new AzureOpenAIAdapter(
+            apiKey,
+            provider.apiEndpoint,
+            provider.defaultModel, // Use defaultModel as deployment name
+            provider.defaultModel,
+            {
+              input: provider.pricingInput,
+              output: provider.pricingOutput,
+            }
+          );
+
         default:
           throw new Error(`Unsupported provider type: ${provider.type}`);
       }
@@ -102,7 +132,7 @@ export class AiService {
       });
 
       return response;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('AI chat error:', error);
 
       // Log failed attempt
@@ -118,7 +148,7 @@ export class AiService {
         latencyMs: Date.now() - startTime,
         cached: false,
         success: false,
-        errorMessage: error.message,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
       });
 
       throw error;
@@ -129,7 +159,7 @@ export class AiService {
    * Check if organization has budget remaining
    */
   private async checkBudget(organizationId: string): Promise<void> {
-    const config = await prisma.organizationAiConfig.findUnique({
+    const config = await prisma.organization_ai_configs.findUnique({
       where: { organizationId },
     });
 
@@ -139,7 +169,7 @@ export class AiService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dailySpend = await prisma.aiUsageLog.aggregate({
+    const dailySpend = await prisma.ai_usage_logs.aggregate({
       where: {
         organizationId,
         createdAt: { gte: today },
@@ -157,7 +187,7 @@ export class AiService {
     // Get monthly spend
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    const monthlySpend = await prisma.aiUsageLog.aggregate({
+    const monthlySpend = await prisma.ai_usage_logs.aggregate({
       where: {
         organizationId,
         createdAt: { gte: monthStart },
@@ -191,8 +221,9 @@ export class AiService {
     errorMessage?: string;
   }): Promise<void> {
     try {
-      await prisma.aiUsageLog.create({
+      await prisma.ai_usage_logs.create({
         data: {
+          id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
           userId: data.userId,
           organizationId: data.organizationId,
           provider: data.provider,
@@ -234,7 +265,7 @@ export class AiService {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
 
-    const logs = await prisma.aiUsageLog.findMany({
+    const logs = await prisma.ai_usage_logs.findMany({
       where: {
         organizationId,
         createdAt: { gte: startDate },
@@ -242,13 +273,13 @@ export class AiService {
       },
     });
 
-    const totalCost = logs.reduce((sum, log) => sum + log.costUsd, 0);
+    const totalCost = logs.reduce((sum: number, log) => sum + log.costUsd, 0);
     const totalRequests = logs.length;
-    const cacheHits = logs.filter(log => log.cached).length;
+    const cacheHits = logs.filter((log) => log.cached).length;
     const cacheHitRate = totalRequests > 0 ? (cacheHits / totalRequests) * 100 : 0;
 
     // Group by provider
-    const byProvider = logs.reduce((acc, log) => {
+    const byProvider = logs.reduce((acc: Record<string, { requests: number; tokens: number; cost: number }>, log) => {
       if (!acc[log.provider]) {
         acc[log.provider] = { requests: 0, tokens: 0, cost: 0 };
       }
@@ -265,7 +296,9 @@ export class AiService {
       byProvider: Object.entries(byProvider).map(([provider, stats]) => ({
         provider,
         providerName: provider.charAt(0).toUpperCase() + provider.slice(1),
-        ...stats,
+        requests: stats.requests,
+        tokens: stats.tokens,
+        cost: stats.cost,
       })),
     };
   }

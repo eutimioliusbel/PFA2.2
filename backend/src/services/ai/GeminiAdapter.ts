@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { IAiProvider, AiChatRequest, AiResponse, AiStreamChunk } from './types';
+import { IAiProvider, AiChatRequest, AiResponse, AiStreamChunk, AiMessage } from './types';
 import { logger } from '../../utils/logger';
 
 export class GeminiAdapter implements IAiProvider {
@@ -56,7 +56,7 @@ export class GeminiAdapter implements IAiProvider {
         latencyMs,
         cost,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Gemini API error:', error);
       throw this.handleError(error);
     }
@@ -79,7 +79,7 @@ export class GeminiAdapter implements IAiProvider {
         const chunkText = chunk.text();
         yield { delta: chunkText };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Gemini stream error:', error);
       throw this.handleError(error);
     }
@@ -106,11 +106,11 @@ export class GeminiAdapter implements IAiProvider {
         organizationId: 'health-check',
       });
       return { healthy: true, latencyMs: Date.now() - startTime };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         healthy: false,
         latencyMs: Date.now() - startTime,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

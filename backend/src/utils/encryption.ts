@@ -65,3 +65,13 @@ export const hashPassword = async (password: string): Promise<string> => {
 export const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
   return bcrypt.compare(password, hash);
 };
+
+/**
+ * Encryption service object (for backward compatibility)
+ */
+export const encryptionService = {
+  encrypt,
+  decrypt,
+  hashPassword,
+  verifyPassword
+};

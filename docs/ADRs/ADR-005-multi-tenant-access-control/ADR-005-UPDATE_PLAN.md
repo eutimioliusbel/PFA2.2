@@ -1,9 +1,9 @@
 # ADR-005: Scope Change Remediation Plan
 
-**Change Request**: "PEMS Hybrid Source of Truth Integration"
-**Change Description**: "Support entities (Users, Organizations, Roles) sourced from PEMS (HxGN EAM) with hybrid authentication, maintaining local flexibility while respecting external identity constraints. Includes: nullable passwordHash for PEMS users with optional local passwords, isExternal flag for PEMS-managed orgs, assignmentSource tracking, sync conflict resolution, and orphan account detection."
-**Impact Analysis**: HIGH
-**Affected Documents**: 4 of 5 blueprint documents
+**Change Request**: "ADR-006 API Server Architecture Integration"
+**Change Description**: "ADR-006 introduces a two-tier API architecture (ApiServer → ApiEndpoint) that interacts with ADR-005's Organization model. ApiServer has organizationId FK to Organization and must respect organization-level access control (perm_ManageSettings), service status (active/suspended), and external entity constraints (isExternal flag). This integration requires updates to permission middleware, cascading logic, and multi-tenant isolation tests."
+**Impact Analysis**: MEDIUM
+**Affected Documents**: 3 of 5 blueprint documents
 **Date Created**: 2025-11-26
 
 ---
@@ -14,10 +14,10 @@
 
 You must update the Blueprint documents **BEFORE** you build the code.
 This ensures:
-- ✅ All stakeholders understand the new scope
-- ✅ UX is designed before implementation
-- ✅ Security is considered upfront (hybrid auth, sync conflicts)
-- ✅ AI data hooks are included from day one
+- ✅ Permission checks are consistently enforced across API server management
+- ✅ Organization service status cascades properly to child API servers
+- ✅ External organization constraints are respected
+- ✅ Multi-tenant isolation is thoroughly tested
 
 Execute the Prompt Bundles below in order. Each bundle targets a specific specialist agent.
 
@@ -27,13 +27,13 @@ Execute the Prompt Bundles below in order. Each bundle targets a specific specia
 
 | Document | Impact Level | Changes Required |
 |----------|-------------|------------------|
-| DECISION.md | **HIGH** | Add hybrid source of truth context (item #18), update User/Organization/UserOrganization database schemas with external identity fields |
-| AI_OPPORTUNITIES.md | **MEDIUM** | Add Use Cases 26-27 for sync conflict resolution and orphan account detection |
-| UX_SPEC.md | **MEDIUM** | Add visual indicators for PEMS-managed entities, edit warnings, source badges |
-| TEST_PLAN.md | **HIGH** | Add security tests for hybrid authentication, sync conflict scenarios, orphan detection |
-| IMPLEMENTATION_PLAN.md | **HIGH** | Update Phase 2 (hybrid auth service), Phase 5 (admin UI logic for external entities) |
+| DECISION.md | **LOW** | No changes needed (database schema already supports organizationId FK) |
+| AI_OPPORTUNITIES.md | **LOW** | No changes needed (API server management is deterministic CRUD) |
+| UX_SPEC.md | **MEDIUM** | Add permission check indicators for API Connectivity UI, org status badges |
+| TEST_PLAN.md | **HIGH** | Add multi-tenant isolation tests, permission authorization tests, org service status cascading tests |
+| IMPLEMENTATION_PLAN.md | **HIGH** | Update Phase 5 with API server authorization middleware, org status validation, external org constraints |
 
-**Total Estimated Time**: 12-16 hours
+**Total Estimated Time**: 4-6 hours
 
 ---
 
@@ -41,378 +41,31 @@ Execute the Prompt Bundles below in order. Each bundle targets a specific specia
 
 Follow these steps in order:
 
-1. ✅ Execute Step 1 (DECISION.md update) - Database schema + business requirements
-2. ✅ Execute Step 2 (AI_OPPORTUNITIES.md update) - Sync conflict AI use cases
-3. ✅ Execute Step 3 (UX_SPEC.md update) - PEMS badges and visual indicators
-4. ✅ Execute Step 4 (TEST_PLAN.md update) - Hybrid auth security tests
-5. ✅ Execute Step 5 (IMPLEMENTATION_PLAN.md update) - Backend auth + Admin UI changes
-6. ✅ Re-orchestrate: `/execute-adr 005`
+1. ⬜ Execute Step 1 (UX_SPEC.md update) - Permission indicators and org status badges
+2. ⬜ Execute Step 2 (TEST_PLAN.md update) - Multi-tenant isolation and permission tests
+3. ⬜ Execute Step 3 (IMPLEMENTATION_PLAN.md update) - Authorization middleware and cascading logic
+4. ⬜ Re-orchestrate: `/execute-adr 005`
 
 ---
 
-## Step 1: Update Requirements & Database Schema
-
-**Target**: `ADR-005-DECISION.md`
-**Agent**: `product-requirements-analyst` + `postgres-jsonb-architect`
-**Reason**: Need to add hybrid source of truth business requirements and update database schema for external identity tracking
-
-**Current State** (from DECISION.md):
-```
-Context and Problem Statement contains 17 requirements.
-Database Schema section defines User, Organization, UserOrganization models.
-```
-
-**Required Changes**:
-- Add requirement #18: Hybrid Source of Truth & Identity
-- Update User model: Make `passwordHash` nullable, add `externalId`, add `authProvider`
-- Update Organization model: Add `externalId`, add `isExternal` flag
-- Update UserOrganization model: Add `assignmentSource`, add `externalRoleId`, add `isCustom` override flag
-
----
-
-### 📋 Prompt Bundle (Copy & Paste This Entire Block)
-
-```text
-@product-requirements-analyst @postgres-jsonb-architect
-
-**SYSTEM CONTEXT**:
-You are updating ADR-005 to add "PEMS Hybrid Source of Truth Integration".
-This is a HIGH-impact scope change to the Multi-Tenant Access Control architecture.
-
-**CURRENT STATE** (Read for context):
-File: `docs/adrs/ADR-005-multi-tenant-access-control/ADR-005-DECISION.md`
-
-Current requirements include items 1-17 covering:
-- Multi-tenant isolation
-- RBAC permissions (14 feature flags)
-- Organization/User service status
-- Session management
-- Financial masking
-- Temporal access controls
-
-Current Database Schema includes:
-- User model (with passwordHash as required String)
-- Organization model (local-only entities)
-- OrganizationRole model
-- UserOrganization model (junction table)
-
-**NEW REQUIREMENT**:
-
-**18. Hybrid Source of Truth & Identity**:
-The system must support entities sourced from PEMS (HxGN EAM) while maintaining local flexibility.
-
-- **Hybrid Identity**: Users may be sourced from PEMS (`authProvider='pems'`) but retain a local password hash for hybrid authentication (`passwordHash` is nullable but often populated).
-- **Hybrid Tenancy**: Organizations may be synced from PEMS. These are "External" records where core identity fields (Code, Name) are read-only locally, but settings are writable.
-- **Hybrid Access**: User assignments can be dictated by PEMS sync (`assignmentSource='pems_sync'`) or granted locally (`assignmentSource='local'`).
-
-**YOUR MISSION**:
-
-**Step 1: Analyze Business Impact**
-This change introduces:
-- [ ] External system as source of truth for identity
-- [ ] Potential sync conflicts (PEMS says "Viewer", local says "Editor")
-- [ ] Orphaned accounts (deleted in PEMS but still in Vanguard)
-- [ ] Hybrid authentication (PEMS user with local password)
-
-These create new acceptance criteria.
-
-**Step 2: Add New Context Item**
-Insert as item #18 in "Context and Problem Statement":
-
-```markdown
-18. **Hybrid Source of Truth & Identity**: The system must support entities sourced from PEMS (HxGN EAM) while maintaining local flexibility.
-   - **Hybrid Identity**: Users may be sourced from PEMS (`authProvider='pems'`) but retain a local password hash for hybrid authentication (`passwordHash` is nullable but often populated).
-   - **Hybrid Tenancy**: Organizations may be synced from PEMS. These are "External" records where core identity fields (Code, Name) are read-only locally, but settings are writable.
-   - **Hybrid Access**: User assignments can be dictated by PEMS sync (`assignmentSource='pems_sync'`) or granted locally (`assignmentSource='local'`).
-```
-
-**Step 3: Update Database Schema**
-
-Replace the User, Organization, and UserOrganization model definitions with these updated versions:
-
-```prisma
-// UPDATED User Model (Hybrid Support)
-model User {
-  id                String   @id @default(cuid())
-  username          String   @unique
-  email             String   @unique
-
-  // Hybrid Auth: Nullable because pure SSO users might not have one,
-  // but Hybrid PEMS users WILL have one.
-  passwordHash      String?
-
-  // Identity Source
-  externalId        String?  @unique // PEMS User ID (e.g., "10345")
-  authProvider      String   @default("local") // "local", "pems"
-
-  // ... rest of existing fields (serviceStatus, preferences, etc.) ...
-
-  @@index([externalId])
-  @@index([authProvider])
-}
-
-// UPDATED Organization Model (Hybrid Tenancy)
-model Organization {
-  id                String   @id @default(cuid())
-
-  // Identity Source
-  externalId        String?  @unique // PEMS Tenant/Org ID
-  isExternal        Boolean  @default(false) // True if managed by PEMS
-
-  // ... rest of existing fields (settings, serviceStatus, etc.) ...
-
-  @@index([externalId])
-  @@index([isExternal])
-}
-
-// UPDATED UserOrganization Model (Hybrid Access)
-model UserOrganization {
-  // ... existing fields (userId, organizationId, roleId, etc.) ...
-
-  // Access Source
-  assignmentSource  String   @default("local") // "local", "pems_sync", "auto_provision"
-  externalRoleId    String?  // Reference to specific PEMS role ID
-
-  // Override Tracking (Crucial for Hybrid)
-  isCustom          Boolean  @default(false) // True if we changed permissions locally for a PEMS-synced user
-
-  @@index([assignmentSource])
-  @@index([isCustom])
-}
-```
-
-**Step 4: Add Acceptance Criteria**
-
-Add these new acceptance criteria to the "Success Criteria" section:
-
-```markdown
-### Hybrid Source of Truth
-- [ ] PEMS users with `authProvider='pems'` can authenticate with local password (hybrid mode)
-- [ ] PEMS users without local password can authenticate via SSO/external token
-- [ ] Organizations with `isExternal=true` have read-only core identity fields (Code, Name)
-- [ ] Local admins can modify settings/preferences for external organizations
-- [ ] User assignments with `assignmentSource='pems_sync'` can be overridden locally (marked `isCustom=true`)
-- [ ] Sync conflicts are detected and flagged for admin review
-- [ ] Orphaned accounts (deleted in PEMS) are automatically flagged for suspension
-```
-
-**DELIVERABLES**:
-1. Complete Markdown section for requirement #18 to insert in DECISION.md
-2. Updated Prisma schema blocks for User, Organization, UserOrganization models
-3. New acceptance criteria section for hybrid source of truth
-4. Note on where to insert these changes in DECISION.md (after requirement #17, in Database Schema section)
-
-**CONSTRAINTS**:
-- Do NOT implement code. Only define WHAT we're building and WHY.
-- Ensure backward compatibility: existing users/orgs default to `authProvider='local'` and `isExternal=false`
-- Consider data migration: existing `passwordHash` values remain valid (nullable allows NULL for future SSO-only users)
-```
-
-**Status**: ⬜ Not Started
-
-**How to Execute**:
-1. Copy the prompt bundle above
-2. Paste into a new chat message
-3. Wait for product-requirements-analyst + postgres-jsonb-architect output
-4. Apply the recommended changes to ADR-005-DECISION.md
-5. Commit the changes to git
-6. Mark this step as ✅ Complete
-
----
-
-## Step 2: Update AI Opportunities
-
-**Target**: `ADR-005-AI_OPPORTUNITIES.md`
-**Agent**: `ai-systems-architect`
-**Condition**: YES (Hybrid model creates new AI opportunities)
-
-**Current State** (from AI_OPPORTUNITIES.md):
-```
-Contains Use Cases 1-25 covering:
-- Part 1: Governance & Security (Use Cases 1-9)
-- Part 2: UX Intelligence (Use Cases 10-15)
-- Part 3: Executive BEO Analytics (Use Cases 16-25)
-```
-
-**Required Changes**:
-- Add Use Case 26: Sync Conflict Resolution
-- Add Use Case 27: Orphan Account Detection
-
----
-
-### 📋 Prompt Bundle (Copy & Paste This Entire Block)
-
-```text
-@ai-systems-architect
-
-**SYSTEM CONTEXT**:
-You are analyzing the AI implications of "PEMS Hybrid Source of Truth Integration".
-
-**CURRENT AI HOOKS** (Read for context):
-File: `docs/adrs/ADR-005-multi-tenant-access-control/ADR-005-AI_OPPORTUNITIES.md`
-
-Current use cases include:
-- Part 1: Governance & Security (Use Cases 1-9) - Permission explanations, audit search, role drift detection
-- Part 2: UX Intelligence (Use Cases 10-15) - Context tooltips, financial masking, smart notifications
-- Part 3: Executive BEO Analytics (Use Cases 16-25) - Voice analyst, variance narratives, scenario planning
-
-**NEW FUNCTIONALITY**:
-The system now supports hybrid source of truth where Users, Organizations, and Role Assignments can be sourced from PEMS (HxGN EAM) or managed locally. This creates:
-1. **Sync Conflicts**: PEMS sync tries to change a permission that was manually overridden locally
-2. **Orphan Accounts**: Users deleted in PEMS but still active in Vanguard
-
-**YOUR MISSION**:
-
-**Step 1: Identify New Data Hooks**
-
-For Sync Conflict Detection:
-- Log: `{ syncId, userId, field, pemsValue, localValue, resolution, timestamp }`
-- Capture in: `pems-sync-service.ts` during reconciliation
-
-For Orphan Account Detection:
-- Log: `{ userId, lastSeenInPems, deletedInPemsAt, currentStatus, timestamp }`
-- Capture in: `pems-sync-service.ts` when user not found in PEMS response
-
-**Step 2: Design the Hook Structure**
-
-```typescript
-// Hook 1: Sync Conflict Detection
-interface SyncConflictEvent {
-  syncId: string;
-  userId: string;
-  organizationId: string;
-  field: string; // e.g., "roleId", "permissions"
-  pemsValue: any;
-  localValue: any;
-  resolution: 'local_wins' | 'pems_wins' | 'manual_review';
-  timestamp: Date;
-}
-
-// Hook 2: Orphan Account Detection
-interface OrphanAccountEvent {
-  userId: string;
-  externalId: string; // PEMS User ID
-  lastSeenInPems: Date;
-  deletedInPemsAt: Date;
-  currentStatus: string; // "active", "suspended"
-  recommendedAction: 'suspend' | 'convert_to_local' | 'delete';
-  timestamp: Date;
-}
-```
-
-**Step 3: AI Use Cases**
-
-Add these two use cases to **Part 1: Governance & Security**:
-
-```markdown
-### Use Case 26: Sync Conflict Resolution
-
-**Scenario**: PEMS sync indicates User "John Doe" should be a "Viewer", but Local Admin previously upgraded him to "Editor" (marked as `isCustom=true`).
-
-**AI Data Available**:
-- PEMS role assignment: `{ roleId: 'viewer', source: 'pems', effectiveDate: '2025-11-20' }`
-- Local override: `{ roleId: 'editor', isCustom: true, modifiedBy: 'admin-sarah', modifiedAt: '2025-11-15' }`
-- Sync policy: `{ conflictResolution: 'local_wins' }`
-
-**AI Action**:
-"🔄 **Conflict Detected**: PEMS sync attempted to downgrade User 'John Doe' from 'Editor' to 'Viewer'. I have preserved the local 'Editor' role (marked as custom override) per your policy 'Local Overrides Win'. This conflict has been flagged for your review in the Audit Log."
-
-**UX Integration**: Toast notification with "View Conflict" button → Opens audit log entry with diff view
-
-**Data Capture**:
-```typescript
-await logAiEvent({
-  type: 'sync_conflict_resolved',
-  userId: john.id,
-  metadata: {
-    field: 'roleId',
-    pemsValue: 'viewer',
-    localValue: 'editor',
-    resolution: 'local_wins',
-    policy: 'local_overrides_win'
-  }
-});
-```
-
-**Mandatory Hook**: `pems-sync-service.ts` → `reconcileUserAssignments()` function
-```
-
-```markdown
-### Use Case 27: Orphan Account Detection
-
-**Scenario**: User "JSmith" (`externalId: 'PEMS-10345'`) was deleted in PEMS 2 days ago but remains `status='active'` in Vanguard. This could be due to sync failure, or the user was converted to a hybrid local account.
-
-**AI Data Available**:
-- User record: `{ id: '...', username: 'jsmith', authProvider: 'pems', externalId: 'PEMS-10345', status: 'active' }`
-- PEMS sync log: `{ syncId: 'sync-123', usersProcessed: 150, jsmithFound: false, timestamp: '2025-11-24' }`
-- Last successful sync before deletion: `{ syncId: 'sync-120', jsmithFound: true, timestamp: '2025-11-22' }`
-
-**AI Action**:
-"⚠️ **Security Alert**: User 'JSmith' (jsmith@example.com) is currently ACTIVE in Vanguard but was deleted from PEMS source system on Nov 22nd. This account has been orphaned for 2 days. Recommended action: Immediate suspension pending investigation."
-
-**UX Integration**: Admin dashboard shows "Orphaned Accounts" badge (count) → Clicking opens filtered user list
-
-**Data Capture**:
-```typescript
-await logAiEvent({
-  type: 'orphan_account_detected',
-  userId: jsmith.id,
-  metadata: {
-    externalId: 'PEMS-10345',
-    lastSeenInPems: '2025-11-22T10:30:00Z',
-    daysSinceOrphaned: 2,
-    currentStatus: 'active',
-    recommendedAction: 'suspend'
-  }
-});
-```
-
-**Mandatory Hook**: `pems-sync-service.ts` → `detectOrphanedAccounts()` function (runs after sync completes)
-```
-
-**Step 4: API Requirements**
-
-For these AI features, the system needs:
-- [ ] **Dry-Run Sync API**: `POST /api/pems/sync/preview` - Shows what would change without applying
-- [ ] **Conflict Review API**: `GET /api/pems/conflicts?status=pending` - Lists all unresolved sync conflicts
-- [ ] **Orphan Account API**: `GET /api/users/orphaned` - Lists users deleted in PEMS but active locally
-
-**DELIVERABLES**:
-1. Two new use cases (26 & 27) formatted for AI_OPPORTUNITIES.md
-2. TypeScript interface definitions for SyncConflictEvent and OrphanAccountEvent
-3. Data capture examples for both use cases
-4. API requirements for AI conflict management features
-5. Recommendation on where to insert (in Part 1: Governance & Security, after Use Case 9 or 25)
-
-**CONSTRAINT**:
-Think proactively about security. Orphaned accounts are a **HIGH RISK** - attackers could exploit deleted PEMS users that remain active in Vanguard.
-```
-
-**Status**: ⬜ Not Started
-
----
-
-## Step 3: Update UX & Interaction Model
+## Step 1: Update UX Specification
 
 **Target**: `ADR-005-UX_SPEC.md`
 **Agent**: `ux-technologist`
-**Condition**: YES (UI needs visual indicators for PEMS entities)
+**Reason**: API Connectivity UI needs to show permission-based access and organization status indicators
 
 **Current State** (from UX_SPEC.md):
 ```
-Version 3.0 with 29 use cases covering:
-- User Management UI
-- Organization Settings UI
-- Permission Matrix
-- Audit Log Viewer
-- Core Governance features (Pre-Flight, Time Travel, Import Wizard, BEO Glass Mode)
+API Connectivity UI shows API configurations in a table
+No permission-based UI restrictions documented
+No organization service status indicators
 ```
 
 **Required Changes**:
-- Add "Source" column to User Management table with PEMS badge
-- Add edit warnings for PEMS-managed users (email field locked warning)
-- Add PEMS badge to Organization Settings with sync controls
-- Update Edit User Modal with hybrid identity warnings
+- Add permission check for API server management (perm_ManageSettings)
+- Add organization status badge to API server entries
+- Add disabled state for API servers when org is suspended
+- Add visual indicator for external organization constraints
 
 ---
 
@@ -422,167 +75,160 @@ Version 3.0 with 29 use cases covering:
 @ux-technologist
 
 **SYSTEM CONTEXT**:
-You are defining the UX specification for "PEMS Hybrid Source of Truth Integration".
+You are updating ADR-005 to accommodate ADR-006's API Server Architecture integration.
 
-**CURRENT UX RULES** (Read for context):
+**CURRENT STATE** (Read for context):
 File: `docs/adrs/ADR-005-multi-tenant-access-control/ADR-005-UX_SPEC.md`
 
-Current version includes:
-- User Management table with columns: Name, Email, Role, Status, Actions
+Current UX specifications include:
+- User Management table with permission-based action buttons
 - Organization Settings page
-- Permission editing modals
+- Permission-based feature visibility
 - Latency budgets: <100ms for UI interactions, <500ms for permission checks
 
-**NEW FUNCTIONALITY**:
-The system now distinguishes between:
-- **Local Users**: Created and managed entirely in Vanguard (`authProvider='local'`)
-- **PEMS Users**: Sourced from PEMS with hybrid authentication (`authProvider='pems'`, may have local password)
-- **Local Orgs**: Created in Vanguard (`isExternal=false`)
-- **PEMS Orgs**: Synced from PEMS with read-only identity (`isExternal=true`)
-
-Users need visual indicators to understand:
-1. Which entities are externally managed (cannot be fully edited/deleted)
-2. When editing might break sync (e.g., changing email for PEMS user)
-3. How to trigger manual sync or view PEMS source
+**NEW FUNCTIONALITY FROM ADR-006**:
+The system now has ApiServer and ApiEndpoint models:
+- ApiServer belongs to Organization (organizationId FK)
+- API server management requires perm_ManageSettings permission
+- API servers should reflect organization service status (suspended orgs = disabled servers)
+- External organizations (isExternal=true) may have constraints on API server creation
 
 **YOUR MISSION**:
 
-**Step 1: Define Visual Indicators**
+**Step 1: API Connectivity UI Permission Checks**
 
-**User Management Table** - Add "Source" column:
-
+**Current UI** (API Connectivity screen):
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ 👥 User Management                                                       │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Name           │ Source       │ Status   │ Actions                       │
-├────────────────┼──────────────┼──────────┼───────────────────────────────┤
-│ John Doe       │ ☁️ PEMS      │ Active   │ [Edit] [Suspend] [Reset PW]   │
-│ Jane Smith     │ 🏠 Local     │ Active   │ [Edit] [Suspend] [Delete]     │
-│ Bob Jones      │ ☁️ PEMS      │ Locked   │ [View Only]                   │
-└────────────────┴──────────────┴──────────┴───────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ 🔌 API Connectivity                                            │
+├────────────────────────────────────────────────────────────────┤
+│ Server Name     │ Organization │ Endpoints │ Actions           │
+├─────────────────┼──────────────┼───────────┼──────────────────┤
+│ PEMS Production │ HOLNG        │ 7         │ [Edit] [Test]    │
+│ PEMS Dev        │ RIO          │ 5         │ [Edit] [Test]    │
+└─────────────────┴──────────────┴───────────┴──────────────────┘
 ```
 
-**Source Badge Rules**:
-- `☁️ PEMS` = Blue badge, tooltip: "User managed by PEMS (HxGN EAM)"
-- `🏠 Local` = Gray badge, tooltip: "User created locally in Vanguard"
-
-**Action Button States**:
-- PEMS users: [Delete] button is **disabled** (show "Suspend" instead)
-- Local users: [Delete] button is **enabled**
-- Both: [Reset PW] is enabled (hybrid auth supports local passwords for PEMS users)
-
-**Step 2: Edit User Modal (Hybrid Warnings)**
-
+**Updated UI** (with permission checks and org status):
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ ✏️ Edit User: John Doe                                                  │
-│ [☁️ PEMS Managed]                                                       │
-├─────────────────────────────────────────────────────────────────────────┤
-│ Username:   john.doe          [Read Only]                               │
-│                                                                          │
-│ Email:      john.doe@example.com                                        │
-│             ⚠️ Warning: Managed by PEMS. Changing this may break sync.  │
-│             [ ] I understand and want to override                       │
-│                                                                          │
-│ Password:   ••••••••••        [Change Password]                         │
-│             ℹ️ Hybrid mode: Local password is supported                 │
-│                                                                          │
-│ Preferences:                                                             │
-│   [✓] Email Notifications                                               │
-│   [ ] Voice Mode                                                        │
-│                                                                          │
-│ [Cancel] [Save Changes]                                                 │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ 🔌 API Connectivity                                            │
+├────────────────────────────────────────────────────────────────┤
+│ Server Name     │ Organization        │ Status │ Actions       │
+├─────────────────┼─────────────────────┼────────┼──────────────┤
+│ PEMS Production │ HOLNG [✅ Active]   │ OK     │ [Edit] [Test]│
+│ PEMS Dev        │ RIO [⚠️ Suspended]  │ -      │ [View Only]  │
+│ ESS Integration │ BECH [☁️ External]  │ OK     │ [Edit] [Test]│
+└─────────────────┴─────────────────────┴────────┴──────────────┘
+
+ℹ️ RIO is suspended - API servers are unavailable
+
+[+ Add Server] ← Only visible if user has perm_ManageSettings
 ```
 
-**Behavior**:
-- **Email field**: Editable, but shows warning. "Save Changes" is **disabled** until user checks "I understand" checkbox.
-- **Password field**: Fully editable for both PEMS and local users (hybrid support).
-- **Username field**: Read-only for PEMS users (linked to external ID).
+**Permission-Based Visibility**:
+- [+ Add Server] button: **Hidden** if `!perm_ManageSettings`
+- [Edit] button: **Hidden** if `!perm_ManageSettings`
+- [Test] button: **Always visible** (read operation)
+- [View Only] mode: Shown for servers in suspended organizations
 
-**Step 3: Organization Settings (PEMS Badge)**
+**Organization Status Badges**:
+- `✅ Active` = Green badge, tooltip: "Organization is active"
+- `⚠️ Suspended` = Orange badge, tooltip: "Organization is suspended - API servers unavailable"
+- `☁️ External` = Blue badge, tooltip: "PEMS-managed organization"
 
+**Step 2: Add/Edit Server Modal (Permission Warnings)**
+
+**Add Server Modal** (permission check):
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 🏢 Organization: HOLNG                                                  │
-│ [☁️ PEMS Synced]                                                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│ Code:       HOLNG              [Read Only]                              │
-│             ℹ️ Managed by PEMS. To rename, update in HxGN EAM.          │
-│                                                                          │
-│ Name:       Holcim Nigeria     [Read Only]                              │
-│                                                                          │
-│ Settings:   [Editable]                                                  │
-│   Timezone:        UTC+1 (Lagos)                                        │
-│   Currency:        NGN                                                  │
-│   Fiscal Year:     Jan-Dec                                              │
-│                                                                          │
-│ Sync Status:                                                            │
-│   Last Sync:       Nov 26, 2025 10:30 AM                                │
-│   Next Sync:       Nov 27, 2025 10:30 AM                                │
-│                                                                          │
-│ [Force Sync Now] [View PEMS Source] [Unlink from PEMS]                 │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ ➕ Add API Server                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ Server Name:   _____________________                            │
+│                                                                  │
+│ Organization:  [Dropdown]                                       │
+│                ⚠️ Only organizations where you have             │
+│                   perm_ManageSettings are shown                 │
+│                                                                  │
+│ Base URL:      https://______________________                   │
+│                                                                  │
+│ Auth Type:     ○ JWT  ○ Basic  ○ OAuth                          │
+│                                                                  │
+│ [Cancel] [Create Server]                                        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **Behavior**:
-- **Code/Name fields**: Read-only for `isExternal=true` orgs (PEMS-managed).
-- **Settings fields**: Fully editable (local preferences override PEMS).
-- **Force Sync Now**: Triggers manual PEMS sync for this org.
-- **Unlink from PEMS**: Converts org to local (sets `isExternal=false`), shows destructive confirmation modal.
+- Organization dropdown: **Filtered** to show only orgs where `perm_ManageSettings = true`
+- If user has 0 orgs with permission: Show message "You don't have permission to manage API servers. Contact your administrator."
+- Suspended orgs: **Included** in dropdown but show warning badge
 
-**Step 4: Perceived Performance**
+**Step 3: Organization Service Status Cascading**
 
-For PEMS-related operations:
-- **Loading User Table**: <500ms (includes fetching `authProvider` for badge display)
-- **Edit Modal Open**: <200ms (badge determination is instant from cached data)
-- **Force Sync Now**: Show progress modal immediately, poll every 2s for sync status updates
-- **Unlink Action**: Show "Are you sure?" modal <100ms, actual unlink operation <1s
+**Scenario**: Admin suspends organization "RIO"
 
-**Step 5: Accessibility**
+**UI Behavior**:
+1. **API Connectivity Table**: RIO's API servers show grayed-out with [View Only] actions
+2. **Status Column**: Changes to "Suspended" (orange badge)
+3. **Test Button**: Becomes disabled with tooltip "Cannot test - Organization is suspended"
+4. **Sync Button** (if applicable): Disabled with same tooltip
 
-- Source badges (☁️, 🏠) must have `aria-label` for screen readers
-- Warning icons (⚠️) must announce "Warning: Managed by PEMS" to screen readers
-- Disabled [Delete] button must have `aria-disabled="true"` and tooltip explaining why
-- Edit modal checkbox "I understand" must be keyboard-navigable (Tab to focus, Space to toggle)
+**Perceived Performance**:
+- **Permission Check**: <50ms (cached from session)
+- **Organization Status Update**: Real-time via WebSocket or 5-second polling
+- **UI State Change**: <100ms (instant badge color change)
+- **Modal Open**: <200ms (permission filtering happens client-side)
+
+**Step 4: Accessibility**
+
+- Organization status badges must have `aria-label` for screen readers
+- Disabled [Edit] button must announce "Edit unavailable - requires Manage Settings permission"
+- Suspended org servers must announce "API server unavailable - Organization is suspended"
+- Permission-filtered dropdown must announce "X organizations available where you have permission"
 
 **DELIVERABLES**:
-1. ASCII mockups for User Management table with Source column
-2. Edit User Modal mockup with hybrid warnings
-3. Organization Settings mockup with PEMS badge
-4. Perceived performance specifications for sync operations
+1. Updated API Connectivity table mockup with org status badges and permission-based actions
+2. Add/Edit Server modal mockup with permission warnings
+3. Suspended organization UI behavior specification
+4. Perceived performance specifications for permission checks
 5. Accessibility requirements for new UI elements
-6. Recommendation on where to insert in UX_SPEC.md (create new section "Hybrid Entity Management" or add to existing User/Org management sections)
+6. Recommendation on where to insert in UX_SPEC.md (create new section "API Server Management UI" or add to existing Admin sections)
 
 **CONSTRAINT**:
-Focus on how it FEELS. Users should immediately understand which entities are externally managed without reading documentation.
+Focus on immediate visual feedback. Users should understand permission restrictions without attempting actions that will fail.
 ```
 
 **Status**: ⬜ Not Started
 
+**How to Execute**:
+1. Copy the prompt bundle above
+2. Paste into a new chat message
+3. Wait for ux-technologist output
+4. Apply the recommended changes to ADR-005-UX_SPEC.md
+5. Commit the changes to git
+6. Mark this step as ✅ Complete
+
 ---
 
-## Step 4: Update Security & Testing Guardrails
+## Step 2: Update Security & Testing Guardrails
 
 **Target**: `ADR-005-TEST_PLAN.md`
 **Agent**: `sdet-test-automation`
-**Always Required**: YES
+**Reason**: Need comprehensive tests for API server authorization, org status cascading, and multi-tenant isolation
 
 **Current State** (from TEST_PLAN.md):
 ```
 Contains 150+ test scenarios covering:
-- Security red-teaming (SQL injection, XSS, IDOR)
-- Critical user flows
-- AI quality assessment
-- Coverage requirements (>80% backend, >80% frontend)
+- Permission-based authorization for user/org management
+- Multi-tenant data isolation
+- Service status lifecycle
 ```
 
 **Required Changes**:
-- Add hybrid authentication security tests
-- Add sync conflict detection tests
-- Add orphan account detection tests
-- Add PEMS entity CRUD restriction tests
+- Add API server authorization tests (perm_ManageSettings required)
+- Add organization service status cascading tests
+- Add multi-tenant isolation tests for API servers
+- Add external organization constraint tests
 
 ---
 
@@ -592,182 +238,211 @@ Contains 150+ test scenarios covering:
 @sdet-test-automation
 
 **SYSTEM CONTEXT**:
-You are defining the testing strategy for "PEMS Hybrid Source of Truth Integration".
+You are updating ADR-005 test plan to cover ADR-006's API Server Architecture integration.
 
 **CURRENT TEST PLAN** (Read for context):
 File: `docs/adrs/ADR-005-multi-tenant-access-control/ADR-005-TEST_PLAN.md`
 
 Current test coverage includes:
-- Security red-teaming for SQL injection, XSS, IDOR, rate limiting
-- Critical user flows for login, permission checks, audit logging
-- AI quality tests for permission explanations and role drift detection
+- Permission-based authorization (14 permission flags)
+- Multi-tenant data isolation (users can only access their org's data)
+- Service status lifecycle (active → suspended → locked)
 
-**NEW FUNCTIONALITY**:
-The system now supports:
-1. **Hybrid Authentication**: PEMS users can have local passwords OR SSO-only
-2. **External Entity Management**: PEMS orgs/users have restricted CRUD operations
-3. **Sync Conflict Detection**: AI detects when PEMS and local values clash
-4. **Orphan Account Detection**: AI flags users deleted in PEMS but active locally
+**NEW FUNCTIONALITY FROM ADR-006**:
+Database schema now includes:
+```prisma
+model ApiServer {
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  baseUrl        String
+  authType       String
+  // ... other fields
+}
+```
+
+**Key Integration Points**:
+1. API server CRUD requires `perm_ManageSettings` permission
+2. API servers belong to organizations (organizationId FK)
+3. Organization service status affects API server availability
+4. External organizations (isExternal=true) may have constraints
 
 **YOUR MISSION**:
 
-**Step 1: Security Red Team Scenarios**
+**Step 1: Authorization Test Suite**
 
-Add these adversarial tests:
+Add these permission-based authorization tests:
 
-**Test Suite: Hybrid Authentication Security**
-
-```
-TEST-HYB-001: Bypass PEMS Authentication
-- Attack: Attacker tries to login as PEMS user using default/common passwords
-- Defense: System must NOT allow password auth if user has no local passwordHash
-- Expected: 401 Unauthorized with message "SSO required for this user"
-
-TEST-HYB-002: PEMS User Impersonation
-- Attack: Attacker creates local user with same email as PEMS user
-- Defense: Email uniqueness constraint prevents duplicate
-- Expected: 409 Conflict with message "Email already exists"
-
-TEST-HYB-003: Hybrid Password Reset Abuse
-- Attack: Attacker resets password for PEMS user to gain access
-- Defense: Password reset requires email verification
-- Expected: Password reset link sent to registered email only
-
-TEST-HYB-004: Orphan Account Exploitation
-- Attack: Attacker compromises PEMS user, then deletes user in PEMS to evade audit
-- Defense: Orphan detection flags account within 24 hours of sync
-- Expected: Account auto-suspended with alert to admins
-```
-
-**Test Suite: External Entity CRUD Restrictions**
+**Test Suite: API Server Management Authorization**
 
 ```
-TEST-EXT-001: Delete PEMS Organization
-- Attack: Local admin tries to DELETE organization with isExternal=true
-- Defense: API returns 403 Forbidden
-- Expected: Error message "Cannot delete PEMS-managed organization. Suspend or unlink instead."
+TEST-API-001: Create API Server Without Permission
+- Setup: User "Bob" has perm_ManageSettings=false for org "HOLNG"
+- Action: POST /api/api-servers { organizationId: 'HOLNG', name: 'Test Server' }
+- Expected: 403 Forbidden with message "Requires perm_ManageSettings permission"
 
-TEST-EXT-002: Rename PEMS Organization Code
-- Attack: Admin tries to PATCH /organizations/{id} with new 'code' for PEMS org
-- Defense: API validates isExternal=true and rejects code change
-- Expected: 422 Unprocessable Entity with field error "code: read-only for external orgs"
+TEST-API-002: Create API Server With Permission
+- Setup: User "Alice" has perm_ManageSettings=true for org "HOLNG"
+- Action: POST /api/api-servers { organizationId: 'HOLNG', name: 'Test Server' }
+- Expected: 201 Created with server object returned
 
-TEST-EXT-003: Delete PEMS User
-- Attack: Admin tries to DELETE /users/{id} for user with authProvider='pems'
-- Defense: API returns 403 Forbidden
-- Expected: Error message "Cannot delete PEMS user. Use suspend instead."
+TEST-API-003: Edit API Server in Different Org
+- Setup: User "Bob" has perm_ManageSettings=true for org "RIO" (not HOLNG)
+- Action: PATCH /api/api-servers/{holng-server-id} { name: 'Hacked' }
+- Expected: 403 Forbidden with message "You don't have permission to manage this organization's API servers"
 
-TEST-EXT-004: Bypass External Flag
-- Attack: Attacker sends PATCH with isExternal=false to convert PEMS org to local
-- Defense: API requires special "unlink" endpoint with confirmation token
-- Expected: 403 Forbidden (must use POST /organizations/{id}/unlink with confirmationToken)
+TEST-API-004: Delete API Server Without Permission
+- Setup: User "Charlie" has perm_ManageSettings=false for org "BECH"
+- Action: DELETE /api/api-servers/{bech-server-id}
+- Expected: 403 Forbidden with message "Requires perm_ManageSettings permission"
+
+TEST-API-005: Test API Server Without Permission
+- Setup: User "Bob" has perm_ManageSettings=false for org "HOLNG"
+- Action: POST /api/api-servers/{holng-server-id}/test
+- Expected: 200 OK (testing is a read operation, doesn't require perm_ManageSettings)
 ```
 
-**Step 2: Critical User Flow Tests**
+**Step 2: Organization Service Status Cascading Tests**
 
-Add these end-to-end scenarios:
+Add these cascading behavior tests:
 
-**Flow: PEMS User Hybrid Login**
-1. User "john.doe@example.com" (authProvider='pems') navigates to /login
-2. User enters username + password (local password is set)
-3. System validates passwordHash (hybrid mode)
-4. User is logged in successfully
-5. Session includes flag `authProvider='pems'` for UI badges
+**Test Suite: Organization Status Cascading**
 
-**Acceptance**:
-- [ ] Login succeeds with valid local password
-- [ ] Login fails with invalid password (same as local users)
-- [ ] UI shows "☁️ PEMS" badge in user profile
+```
+TEST-CASCADE-001: Suspend Organization Affects API Servers
+- Setup: Organization "RIO" is active with 3 API servers
+- Action: PATCH /api/organizations/RIO { serviceStatus: 'suspended' }
+- Expected: API servers still exist but connections should fail with "Organization suspended"
 
-**Flow: Sync Conflict Detection**
-1. Admin manually upgrades PEMS user "jane@example.com" to "Editor" role
-2. System marks assignment as `isCustom=true`
-3. PEMS sync runs and indicates user should be "Viewer"
-4. System detects conflict (local='Editor', pems='Viewer')
-5. AI logs conflict event and preserves local "Editor" role
-6. Admin receives notification: "1 sync conflict detected"
+TEST-CASCADE-002: API Server Test During Org Suspension
+- Setup: Organization "HOLNG" is suspended
+- Action: POST /api/api-servers/{holng-server-id}/test
+- Expected: 403 Forbidden with message "Cannot test - Organization is suspended"
 
-**Acceptance**:
-- [ ] Local role is preserved (isCustom=true)
-- [ ] Conflict is logged in audit table
-- [ ] Admin notification sent within 5 minutes
-- [ ] Conflict appears in Admin Dashboard "Conflicts" tab
+TEST-CASCADE-003: Reactivate Organization Restores API Servers
+- Setup: Organization "RIO" is suspended, then reactivated
+- Action: PATCH /api/organizations/RIO { serviceStatus: 'active' }
+- Expected: API servers become available again, test endpoints succeed
 
-**Flow: Orphan Account Detection**
-1. PEMS sync runs and processes 100 users
-2. User "bob@example.com" (externalId='PEMS-99') is NOT in PEMS response
-3. System checks last sync where Bob was found (2 days ago)
-4. System marks Bob as orphaned and logs event
-5. AI recommends suspension
-6. Admin receives alert: "1 orphaned account detected"
+TEST-CASCADE-004: Delete Organization Cascades to API Servers
+- Setup: Organization "BECH" has 2 API servers, isExternal=false
+- Action: DELETE /api/organizations/BECH
+- Expected: Organization and all 2 API servers are deleted (onDelete: Cascade)
 
-**Acceptance**:
-- [ ] User status remains "active" (not auto-suspended yet)
-- [ ] Orphan event logged with recommendation
-- [ ] Admin alert sent within 1 hour of sync completion
-- [ ] User appears in Admin Dashboard "Orphaned Accounts" list
+TEST-CASCADE-005: Cannot Delete External Org with API Servers
+- Setup: Organization "PEMS_Global" has isExternal=true with 5 API servers
+- Action: DELETE /api/organizations/PEMS_Global
+- Expected: 403 Forbidden (external orgs cannot be deleted, must unlink first)
+```
 
-**Step 3: Performance Thresholds**
+**Step 3: Multi-Tenant Isolation Tests**
 
-For PEMS hybrid operations:
-- **Hybrid auth login**: <300ms (same as local users)
-- **Sync conflict detection**: <50ms per conflict (during sync)
-- **Orphan detection query**: <200ms (after sync completes)
-- **UI badge rendering**: <10ms (cached from user record)
+Add these cross-organization isolation tests:
 
-**Step 4: Edge Cases**
+**Test Suite: API Server Multi-Tenant Isolation**
 
-What breaks hybrid source of truth?
+```
+TEST-ISOLATION-001: User Cannot See Other Org's API Servers
+- Setup: User "Alice" belongs to org "HOLNG", org "RIO" has 3 API servers
+- Action: GET /api/api-servers (filtered by user's org)
+- Expected: Returns only HOLNG's API servers, RIO's servers are not visible
+
+TEST-ISOLATION-002: Admin Across Multiple Orgs Sees Correct Servers
+- Setup: User "Bob" has perm_ManageSettings for both "HOLNG" and "RIO"
+- Action: GET /api/api-servers?organizationId=HOLNG
+- Expected: Returns only HOLNG's servers
+- Action: GET /api/api-servers?organizationId=RIO
+- Expected: Returns only RIO's servers
+
+TEST-ISOLATION-003: Cannot Create API Server for Unauthorized Org
+- Setup: User "Charlie" has perm_ManageSettings for org "BECH" only
+- Action: POST /api/api-servers { organizationId: 'HOLNG', name: 'Hack' }
+- Expected: 403 Forbidden "You don't have permission to manage HOLNG's API servers"
+
+TEST-ISOLATION-004: Organization Switch Updates API Server List
+- Setup: User "Alice" switches from org "HOLNG" to org "RIO"
+- Action: Switch context to RIO, then GET /api/api-servers
+- Expected: Returns RIO's servers only (not HOLNG's)
+```
+
+**Step 4: External Organization Constraints**
+
+Add these external org constraint tests:
+
+**Test Suite: External Organization API Server Constraints**
+
+```
+TEST-EXT-API-001: Create API Server for External Org
+- Setup: Organization "PEMS_Global" has isExternal=true
+- Action: POST /api/api-servers { organizationId: 'PEMS_Global', name: 'Test' }
+- Expected: 201 Created (external orgs CAN have API servers - settings are writable)
+
+TEST-EXT-API-002: Sync Affects External Org's API Servers
+- Setup: External org "PEMS_Global" has enableSync=true and 2 API servers
+- Action: PEMS sync updates organization settings
+- Expected: API server configs remain unchanged (only org identity is read-only)
+
+TEST-EXT-API-003: Unlink External Org Preserves API Servers
+- Setup: External org "HOLNG" has isExternal=true with 3 API servers
+- Action: POST /api/organizations/HOLNG/unlink { confirmationToken }
+- Expected: Organization becomes local (isExternal=false), API servers remain intact
+```
+
+**Step 5: Performance Thresholds**
+
+For API server management operations:
+- **Permission check**: <50ms (cached from user session)
+- **Organization status validation**: <100ms (single DB query)
+- **API server list query** (filtered by org): <200ms (indexed on organizationId)
+- **Cascading delete** (org + servers): <500ms (transaction with 10 servers)
+
+**Step 6: Edge Cases**
+
+What breaks API server management?
 
 **Edge Case Tests**:
 
 ```
-EDGE-001: PEMS User with No Local Password
-- Scenario: User has authProvider='pems' and passwordHash=NULL
-- Expected: Password login fails, SSO login succeeds
-- Test: Attempt login with password → 401, attempt SSO → 200
+EDGE-API-001: API Server Without Organization
+- Scenario: Attempt to create API server with null/invalid organizationId
+- Expected: 400 Bad Request "organizationId is required"
 
-EDGE-002: Orphan Account that Was Converted to Local
-- Scenario: PEMS user was manually converted (authProvider changed to 'local')
-- Expected: Orphan detection ignores this user (no longer PEMS-linked)
-- Test: Sync runs, user not in PEMS → No orphan alert
+EDGE-API-002: Permission Revoked During Edit Session
+- Scenario: User "Bob" opens Edit Server modal, admin revokes perm_ManageSettings, Bob submits form
+- Expected: 403 Forbidden (permission re-checked on submit)
 
-EDGE-003: Sync Conflict with Multiple Overrides
-- Scenario: Local admin changed BOTH role AND permissions for PEMS user
-- Expected: Both overrides preserved (isCustom=true for assignment)
-- Test: Verify both fields retained after sync
+EDGE-API-003: Organization Suspended During API Server Test
+- Scenario: User initiates API server test, admin suspends org mid-test
+- Expected: Test completes (already in progress) but next test fails
 
-EDGE-004: Force Unlink During Active Sync
-- Scenario: Admin clicks "Unlink from PEMS" while sync is running
-- Expected: Unlink operation waits for sync completion
-- Test: API returns 409 Conflict "Sync in progress, retry in X seconds"
-
-EDGE-005: Deleted PEMS User Re-Created
-- Scenario: User deleted in PEMS (orphaned), then re-created in PEMS with same email
-- Expected: System links to new PEMS externalId, clears orphan flag
-- Test: Sync detects new externalId, updates user record, removes orphan status
+EDGE-API-004: User Leaves Organization with API Server Management Open
+- Scenario: User "Alice" has API Connectivity page open, admin removes her from org
+- Expected: Next API call returns 403, UI shows "You no longer have access to this organization"
 ```
 
 **DELIVERABLES**:
-1. Security red team test suite (8 tests) for hybrid auth and external entity restrictions
-2. Critical user flow tests (3 flows) with acceptance criteria
-3. Performance thresholds for sync operations
-4. Edge case test scenarios (5 tests)
-5. Recommendation on where to insert in TEST_PLAN.md (create new section "Hybrid Source of Truth Security")
+1. API server authorization test suite (5 tests)
+2. Organization status cascading test suite (5 tests)
+3. Multi-tenant isolation test suite (4 tests)
+4. External organization constraint test suite (3 tests)
+5. Performance thresholds for API server operations
+6. Edge case test scenarios (4 tests)
+7. Recommendation on where to insert in TEST_PLAN.md (create new section "API Server Management Testing")
 
 **CONSTRAINT**:
-Think adversarially. Orphaned accounts are a **CRITICAL SECURITY RISK**. Your tests must ensure they're detected within 24 hours max.
+Think about cross-organization attacks. A malicious user with perm_ManageSettings for Org A should NOT be able to create/edit/delete API servers for Org B.
 ```
 
 **Status**: ⬜ Not Started
 
 ---
 
-## Step 5: Update Technical Implementation Plan
+## Step 3: Update Technical Implementation Plan
 
 **Target**: `ADR-005-IMPLEMENTATION_PLAN.md`
 **Agent**: `backend-architecture-optimizer`
-**Always Required**: YES
+**Reason**: Need authorization middleware, org status validation, and cascading logic for API server management
 
 **Current State** (from IMPLEMENTATION_PLAN.md):
 ```
@@ -775,12 +450,12 @@ Version 2.0 with 10 phases:
 - Phase 1: Database Schema
 - Phase 2: Backend Authorization
 - Phase 5: Admin UI + Core Governance
-- (Phases 3-10 cover PEMS sync, frontend, AI, testing)
 ```
 
 **Required Changes**:
-- Update Phase 2: Hybrid authentication service logic
-- Update Phase 5: Admin UI restrictions for external entities
+- Update Phase 2: Add API server authorization middleware
+- Update Phase 5: Add org status validation for API server operations
+- Add cascading logic documentation
 
 ---
 
@@ -790,359 +465,413 @@ Version 2.0 with 10 phases:
 @backend-architecture-optimizer
 
 **SYSTEM CONTEXT**:
-You are designing the technical implementation for "PEMS Hybrid Source of Truth Integration".
+You are updating ADR-005 implementation plan to accommodate ADR-006's API Server Architecture integration.
 
 **CURRENT ARCHITECTURE** (Read for context):
 File: `docs/adrs/ADR-005-multi-tenant-access-control/ADR-005-IMPLEMENTATION_PLAN.md`
 
 Current Phase 2 includes:
-- authService.login() - validates username + passwordHash
-- JWT token generation
-- Session management
+- Permission middleware for user/org management
+- requirePermission() guard decorator
+- Organization context filtering
 
 Current Phase 5 includes:
-- User CRUD APIs (GET, POST, PATCH, DELETE)
-- Organization CRUD APIs
-- Admin UI for user/org management
+- User CRUD APIs with permission checks
+- Organization CRUD APIs with external entity restrictions
 
-**NEW FUNCTIONALITY**:
-Database schema now includes:
-- User.authProvider ('local' | 'pems')
-- User.externalId (PEMS User ID)
-- User.passwordHash (nullable for SSO-only users)
-- Organization.isExternal (true if PEMS-managed)
-- UserOrganization.assignmentSource ('local' | 'pems_sync')
-- UserOrganization.isCustom (true if locally overridden)
+**NEW FUNCTIONALITY FROM ADR-006**:
+Database schema includes:
+```prisma
+model ApiServer {
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  baseUrl        String
+  authType       String
 
-**PERFORMANCE CONSTRAINT**: Hybrid auth must complete in <300ms (same as local auth)
+  @@index([organizationId])
+}
+
+model ApiEndpoint {
+  id         String    @id @default(cuid())
+  serverId   String
+  server     ApiServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  // ... other fields
+}
+```
+
+**Key Requirements**:
+1. API server CRUD requires `perm_ManageSettings` permission
+2. Organization service status affects API server availability
+3. Multi-tenant isolation (user can only manage servers for their orgs)
+4. Cascading delete (delete org → delete all API servers)
 
 **YOUR MISSION**:
 
-**Step 1: Update Phase 2 - Backend Authorization**
+**Step 1: Update Phase 2 - Authorization Middleware**
 
-**Task 2.1: Hybrid Authentication Service**
+**Task 2.3: API Server Authorization Middleware**
 
-Current implementation:
+Add new middleware for API server management:
+
 ```typescript
-async login(username: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-    throw new UnauthorizedException('Invalid credentials');
-  }
-  return generateJWT(user);
-}
-```
+// backend/src/middleware/requireApiServerPermission.ts
 
-**New implementation** (Hybrid support):
-```typescript
-async login(username: string, password: string, ssoToken?: string) {
-  const user = await prisma.user.findUnique({ where: { username } });
-  if (!user) {
-    throw new UnauthorizedException('Invalid credentials');
-  }
+import { Request, Response, NextFunction } from 'express';
+import { prisma } from '../config/database';
+import { ForbiddenException } from '../utils/exceptions';
 
-  // Hybrid Auth Logic
-  if (user.authProvider === 'local') {
-    // Local users MUST have passwordHash
-    if (!user.passwordHash || !bcrypt.compareSync(password, user.passwordHash)) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-  } else if (user.authProvider === 'pems') {
-    // PEMS users: Try local password first (Hybrid), fallback to SSO
-    if (password && user.passwordHash) {
-      // Hybrid mode: Local password is set
-      if (!bcrypt.compareSync(password, user.passwordHash)) {
-        throw new UnauthorizedException('Invalid credentials');
-      }
-    } else if (ssoToken) {
-      // SSO-only mode: Validate external token
-      const isValid = await this.validatePemsToken(ssoToken);
-      if (!isValid) {
-        throw new UnauthorizedException('Invalid SSO token');
-      }
-    } else {
-      throw new UnauthorizedException('Password or SSO required');
-    }
-  }
+/**
+ * Middleware to check if user has perm_ManageSettings for the organization
+ * that owns the API server being accessed.
+ */
+export async function requireApiServerPermission(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const { user } = req; // From JWT auth middleware
+  const serverId = req.params.id || req.body.serverId;
+  const organizationId = req.body.organizationId;
 
-  return generateJWT(user);
-}
-```
+  // For CREATE operations, check permission on target organization
+  if (req.method === 'POST' && organizationId) {
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId: user.id,
+        organizationId: organizationId,
+        perm_ManageSettings: true,
+      },
+    });
 
-**Task 2.2: JIT Provisioning (Auto-Create PEMS Users)**
-
-Add new service method:
-```typescript
-async provisionPemsUser(pemsUserData: PemsUserDto) {
-  // Called when PEMS SSO succeeds but user doesn't exist locally
-  const user = await prisma.user.create({
-    data: {
-      username: pemsUserData.username,
-      email: pemsUserData.email,
-      authProvider: 'pems',
-      externalId: pemsUserData.id,
-      passwordHash: null, // SSO-only initially
-      serviceStatus: 'active',
-    }
-  });
-  return user;
-}
-```
-
-**Step 2: Update Phase 5 - Admin UI APIs**
-
-**Task 5.1: User CRUD Restrictions**
-
-Update `PATCH /api/users/:id` endpoint:
-```typescript
-async updateUser(id: string, data: UpdateUserDto, force: boolean = false) {
-  const user = await prisma.user.findUnique({ where: { id } });
-
-  // Warning: Editing PEMS user email
-  if (user.authProvider === 'pems' && data.email && data.email !== user.email) {
-    if (!force) {
-      throw new ConflictException({
-        message: 'Changing email for PEMS user may break sync',
-        requiresConfirmation: true,
-        confirmationFlag: 'force=true'
+    if (!userOrg) {
+      throw new ForbiddenException({
+        message: 'You don\'t have permission to manage this organization\'s API servers',
+        requiredPermission: 'perm_ManageSettings',
+        organizationId,
       });
     }
-    // If force=true, log warning and proceed
-    await auditLog.warn(`Admin overrode email for PEMS user ${id}`);
-  }
 
-  // Allow password updates for both local and PEMS users (Hybrid support)
-  if (data.password) {
-    data.passwordHash = bcrypt.hashSync(data.password, 10);
-    delete data.password;
-  }
-
-  return prisma.user.update({ where: { id }, data });
-}
-```
-
-Update `DELETE /api/users/:id` endpoint:
-```typescript
-async deleteUser(id: string) {
-  const user = await prisma.user.findUnique({ where: { id } });
-
-  // Prevent deletion of PEMS users
-  if (user.authProvider === 'pems') {
-    throw new ForbiddenException({
-      message: 'Cannot delete PEMS-managed user',
-      recommendation: 'Use suspend instead',
-      endpoint: 'PATCH /api/users/:id { serviceStatus: "suspended" }'
+    // Check organization service status
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
     });
-  }
 
-  return prisma.user.delete({ where: { id } });
-}
-```
-
-**Task 5.2: Organization CRUD Restrictions**
-
-Update `PATCH /api/organizations/:id` endpoint:
-```typescript
-async updateOrganization(id: string, data: UpdateOrgDto) {
-  const org = await prisma.organization.findUnique({ where: { id } });
-
-  // Read-only fields for PEMS orgs
-  if (org.isExternal) {
-    const readOnlyFields = ['code', 'name'];
-    const attemptedChanges = readOnlyFields.filter(f => data[f] !== undefined);
-
-    if (attemptedChanges.length > 0) {
-      throw new UnprocessableEntityException({
-        message: 'Cannot modify core identity fields for PEMS-managed organization',
-        readOnlyFields: attemptedChanges,
-        recommendation: 'Update in PEMS (HxGN EAM) to sync changes'
+    if (org.serviceStatus === 'suspended') {
+      throw new ForbiddenException({
+        message: 'Cannot manage API servers - Organization is suspended',
+        organizationId,
+        serviceStatus: org.serviceStatus,
       });
     }
+
+    return next();
   }
 
-  // Settings/preferences are always writable
-  return prisma.organization.update({ where: { id }, data });
-}
-```
-
-Update `DELETE /api/organizations/:id` endpoint:
-```typescript
-async deleteOrganization(id: string) {
-  const org = await prisma.organization.findUnique({ where: { id } });
-
-  // Prevent deletion of PEMS orgs
-  if (org.isExternal) {
-    throw new ForbiddenException({
-      message: 'Cannot delete PEMS-managed organization',
-      recommendation: 'Use unlink endpoint to convert to local',
-      endpoint: 'POST /api/organizations/:id/unlink { confirmationToken }'
+  // For UPDATE/DELETE/TEST operations, check permission on server's organization
+  if (serverId) {
+    const server = await prisma.apiServer.findUnique({
+      where: { id: serverId },
+      include: { organization: true },
     });
+
+    if (!server) {
+      return res.status(404).json({ error: 'API server not found' });
+    }
+
+    // Check user has permission for this server's organization
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId: user.id,
+        organizationId: server.organizationId,
+        // Test operations don't require perm_ManageSettings (read-only)
+        ...(req.path.includes('/test') ? {} : { perm_ManageSettings: true }),
+      },
+    });
+
+    if (!userOrg) {
+      throw new ForbiddenException({
+        message: req.path.includes('/test')
+          ? 'You don\'t have access to this organization'
+          : 'Requires perm_ManageSettings permission',
+        requiredPermission: req.path.includes('/test') ? 'perm_Read' : 'perm_ManageSettings',
+        organizationId: server.organizationId,
+      });
+    }
+
+    // Check organization status for non-read operations
+    if (!req.path.includes('/test') && server.organization.serviceStatus === 'suspended') {
+      throw new ForbiddenException({
+        message: 'Cannot manage API servers - Organization is suspended',
+        organizationId: server.organizationId,
+        serviceStatus: server.organization.serviceStatus,
+      });
+    }
+
+    // For test operations, also check org status
+    if (req.path.includes('/test') && server.organization.serviceStatus === 'suspended') {
+      throw new ForbiddenException({
+        message: 'Cannot test API server - Organization is suspended',
+        organizationId: server.organizationId,
+        serviceStatus: server.organization.serviceStatus,
+      });
+    }
+
+    return next();
   }
 
-  return prisma.organization.delete({ where: { id } });
+  // No serverId or organizationId provided
+  return res.status(400).json({ error: 'Missing serverId or organizationId' });
 }
 ```
 
-**Step 3: New Endpoint - Unlink from PEMS**
+**Step 2: Update Phase 5 - API Server CRUD Endpoints**
 
-Add new endpoint:
+**Task 5.3: API Server Management Endpoints**
+
+Add API server CRUD with authorization:
+
 ```typescript
-// POST /api/organizations/:id/unlink
-async unlinkFromPems(id: string, confirmationToken: string) {
-  // Verify confirmation token (sent via email to prevent accidents)
-  const isValid = await this.verifyUnlinkToken(confirmationToken);
-  if (!isValid) {
-    throw new UnauthorizedException('Invalid confirmation token');
-  }
+// backend/src/controllers/apiServerController.ts
 
-  const org = await prisma.organization.update({
-    where: { id },
-    data: {
-      isExternal: false,
-      externalId: null,
-      // Keep all other data (code, name, settings) intact
-    }
+import { Router } from 'express';
+import { prisma } from '../config/database';
+import { requireAuth } from '../middleware/requireAuth';
+import { requireApiServerPermission } from '../middleware/requireApiServerPermission';
+
+const router = Router();
+
+// GET /api/api-servers - List API servers for user's organizations
+router.get('/', requireAuth, async (req, res) => {
+  const { user } = req;
+  const { organizationId } = req.query;
+
+  // Get all organizations user has access to
+  const userOrgs = await prisma.userOrganization.findMany({
+    where: { userId: user.id },
+    select: { organizationId: true },
   });
 
-  await auditLog.critical(`Organization ${org.code} unlinked from PEMS by admin`);
-  return org;
-}
-```
+  const orgIds = userOrgs.map(uo => uo.organizationId);
 
-**Step 4: AI Hooks Integration**
-
-From `ADR-005-AI_OPPORTUNITIES.md`, we need:
-- Sync conflict detection hook in `pems-sync-service.ts`
-- Orphan account detection hook in `pems-sync-service.ts`
-
-Add to `pems-sync-service.ts`:
-```typescript
-async reconcileUserAssignments(pemsUsers: PemsUser[]) {
-  for (const pemsUser of pemsUsers) {
-    const localUser = await prisma.user.findUnique({
-      where: { externalId: pemsUser.id },
-      include: { organizations: true }
-    });
-
-    if (!localUser) continue;
-
-    for (const pemsAssignment of pemsUser.assignments) {
-      const localAssignment = localUser.organizations.find(
-        o => o.organizationId === pemsAssignment.orgId
-      );
-
-      // CONFLICT DETECTION (AI Hook)
-      if (localAssignment?.isCustom && localAssignment.roleId !== pemsAssignment.roleId) {
-        await logAiEvent({
-          type: 'sync_conflict_resolved',
-          userId: localUser.id,
-          metadata: {
-            field: 'roleId',
-            pemsValue: pemsAssignment.roleId,
-            localValue: localAssignment.roleId,
-            resolution: 'local_wins',
-            policy: 'preserve_custom_overrides'
-          }
-        });
-        // Preserve local override (don't update)
-        continue;
-      }
-
-      // No conflict: Apply PEMS value
-      await prisma.userOrganization.update({
-        where: { id: localAssignment.id },
-        data: {
-          roleId: pemsAssignment.roleId,
-          assignmentSource: 'pems_sync',
-        }
-      });
-    }
-  }
-}
-
-async detectOrphanedAccounts(pemsUsers: PemsUser[]) {
-  const pemsExternalIds = pemsUsers.map(u => u.id);
-
-  // Find all PEMS users in local DB that were NOT in PEMS response
-  const orphans = await prisma.user.findMany({
+  // Filter by specific org if requested
+  const servers = await prisma.apiServer.findMany({
     where: {
-      authProvider: 'pems',
-      externalId: { notIn: pemsExternalIds },
-      serviceStatus: 'active', // Only flag active users
-    }
+      organizationId: organizationId
+        ? { equals: organizationId as string }
+        : { in: orgIds },
+    },
+    include: {
+      organization: {
+        select: { code: true, name: true, serviceStatus: true, isExternal: true },
+      },
+      endpoints: true,
+    },
+    orderBy: { name: 'asc' },
   });
 
-  for (const orphan of orphans) {
-    // ORPHAN DETECTION (AI Hook)
-    await logAiEvent({
-      type: 'orphan_account_detected',
-      userId: orphan.id,
-      metadata: {
-        externalId: orphan.externalId,
-        lastSeenInPems: orphan.updatedAt, // Approximation
-        daysSinceOrphaned: daysSince(orphan.updatedAt),
-        currentStatus: orphan.serviceStatus,
-        recommendedAction: 'suspend'
-      }
+  res.json(servers);
+});
+
+// POST /api/api-servers - Create API server
+router.post('/', requireAuth, requireApiServerPermission, async (req, res) => {
+  const { organizationId, name, baseUrl, authType, credentials } = req.body;
+
+  const server = await prisma.apiServer.create({
+    data: {
+      organizationId,
+      name,
+      baseUrl,
+      authType,
+      credentials, // Encrypted
+    },
+    include: { organization: true },
+  });
+
+  res.status(201).json(server);
+});
+
+// PATCH /api/api-servers/:id - Update API server
+router.patch('/:id', requireAuth, requireApiServerPermission, async (req, res) => {
+  const { id } = req.params;
+  const { name, baseUrl, authType, credentials } = req.body;
+
+  const server = await prisma.apiServer.update({
+    where: { id },
+    data: { name, baseUrl, authType, credentials },
+    include: { organization: true },
+  });
+
+  res.json(server);
+});
+
+// DELETE /api/api-servers/:id - Delete API server
+router.delete('/:id', requireAuth, requireApiServerPermission, async (req, res) => {
+  const { id } = req.params;
+
+  // Cascading delete will remove all endpoints
+  await prisma.apiServer.delete({ where: { id } });
+
+  res.json({ message: 'API server deleted' });
+});
+
+// POST /api/api-servers/:id/test - Test API server connection
+router.post('/:id/test', requireAuth, requireApiServerPermission, async (req, res) => {
+  const { id } = req.params;
+
+  const server = await prisma.apiServer.findUnique({
+    where: { id },
+    include: { organization: true },
+  });
+
+  // Test connection logic here...
+  const testResult = await testApiConnection(server);
+
+  res.json(testResult);
+});
+
+export default router;
+```
+
+**Step 3: Organization Status Validation**
+
+**Task 5.4: Organization Status Validation Service**
+
+Add validation helper:
+
+```typescript
+// backend/src/services/organizationValidation.ts
+
+import { prisma } from '../config/database';
+import { ForbiddenException } from '../utils/exceptions';
+
+export class OrganizationValidationService {
+  /**
+   * Validates organization is in active status for management operations
+   */
+  static async validateOrgActive(organizationId: string, operation: string) {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { code: true, serviceStatus: true },
     });
 
-    // Send admin alert
-    await notificationService.sendAlert({
-      type: 'security',
-      priority: 'high',
-      message: `Orphaned account detected: ${orphan.email}`,
-      action: `Review user ${orphan.id}`
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    if (org.serviceStatus !== 'active') {
+      throw new ForbiddenException({
+        message: `Cannot ${operation} - Organization is ${org.serviceStatus}`,
+        organizationCode: org.code,
+        serviceStatus: org.serviceStatus,
+        recommendation: 'Reactivate organization first',
+      });
+    }
+
+    return org;
+  }
+
+  /**
+   * Checks if user has specific permission for organization
+   */
+  static async checkUserOrgPermission(
+    userId: string,
+    organizationId: string,
+    permission: string
+  ): Promise<boolean> {
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId,
+        [permission]: true,
+      },
     });
+
+    return !!userOrg;
   }
 }
 ```
 
-**Step 5: Error Handling**
+**Step 4: Cascading Delete Documentation**
 
-For hybrid auth failures:
-```typescript
-// Scenario: PEMS user with no local password tries password login
-HTTP 401 Unauthorized
-{
-  "error": "AuthenticationFailed",
-  "message": "This user requires SSO authentication",
-  "authProvider": "pems",
-  "supportedMethods": ["sso"],
-  "ssoEndpoint": "/auth/pems/sso"
+**Database Cascading Behavior**:
+
+From ADR-006 schema:
+```prisma
+model ApiServer {
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
-// Scenario: Admin tries to delete PEMS org
+model ApiEndpoint {
+  server     ApiServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+```
+
+**Cascade Chain**:
+```
+DELETE Organization
+  ↓ onDelete: Cascade
+DELETE ApiServer(s)
+  ↓ onDelete: Cascade
+DELETE ApiEndpoint(s)
+```
+
+**Important**: External organizations (isExternal=true) cannot be deleted, so this cascade only applies to local organizations.
+
+**Step 5: Error Response Specifications**
+
+For API server operations:
+
+```typescript
+// Permission denied
 HTTP 403 Forbidden
 {
-  "error": "OperationNotAllowed",
-  "message": "Cannot delete PEMS-managed organization",
-  "recommendation": "Use suspend or unlink instead",
-  "allowedEndpoints": [
-    "PATCH /api/organizations/:id { serviceStatus: 'suspended' }",
-    "POST /api/organizations/:id/unlink { confirmationToken }"
-  ]
+  "error": "PermissionDenied",
+  "message": "You don't have permission to manage this organization's API servers",
+  "requiredPermission": "perm_ManageSettings",
+  "organizationId": "clx123...",
+  "organizationCode": "HOLNG"
+}
+
+// Organization suspended
+HTTP 403 Forbidden
+{
+  "error": "OrganizationSuspended",
+  "message": "Cannot manage API servers - Organization is suspended",
+  "organizationId": "clx123...",
+  "organizationCode": "RIO",
+  "serviceStatus": "suspended",
+  "recommendation": "Reactivate organization first"
+}
+
+// Cross-organization access attempt
+HTTP 403 Forbidden
+{
+  "error": "CrossOrganizationAccess",
+  "message": "You don't have access to this organization's API servers",
+  "requestedOrganization": "HOLNG",
+  "yourOrganizations": ["RIO", "BECH"]
 }
 ```
 
 **DELIVERABLES**:
-1. Updated authService.login() implementation with hybrid logic
-2. JIT provisioning service method
-3. Updated User/Organization CRUD endpoints with external entity restrictions
-4. New unlink endpoint specification
-5. AI hook integration points in pems-sync-service.ts
-6. Error response specifications
-7. Recommendation on where to insert in IMPLEMENTATION_PLAN.md (modify Phase 2 Task 2.1, Phase 5 Tasks 5.1-5.2)
+1. API server authorization middleware implementation
+2. API server CRUD controller with permission checks
+3. Organization status validation service
+4. Cascading delete documentation
+5. Error response specifications
+6. Recommendation on where to insert in IMPLEMENTATION_PLAN.md (add Task 2.3 to Phase 2, Tasks 5.3-5.4 to Phase 5)
 
 **CONSTRAINT**:
-Focus on BACKEND architecture. Frontend changes for badges/warnings are handled in UX_SPEC.md.
-Ensure backward compatibility: existing users/orgs default to local with no migration needed.
+Focus on authorization and validation. The API server connection logic (testing, credentials encryption) is handled in ADR-006 implementation. This update only covers ADR-005 integration points.
 ```
 
 **Status**: ⬜ Not Started
 
 ---
 
-## 🔄 Step 6: Re-Orchestrate the Workflow
+## 🔄 Step 4: Re-Orchestrate the Workflow
 
 **After ALL blueprint updates are complete**, regenerate the implementation workflow:
 
@@ -1151,23 +880,20 @@ Ensure backward compatibility: existing users/orgs default to local with no migr
 ```
 
 **What This Does**:
-- Reads your UPDATED blueprint documents (DECISION, AI_OPPORTUNITIES, UX_SPEC, TEST_PLAN, IMPLEMENTATION_PLAN)
+- Reads your UPDATED blueprint documents (UX_SPEC, TEST_PLAN, IMPLEMENTATION_PLAN)
 - Generates a NEW `ADR-005-AGENT_WORKFLOW.md` file
-- Includes new tasks for implementing hybrid source of truth
-- Updates dependency graph to reflect PEMS integration work
-- Adjusts timeline estimate (likely adds 3-5 days for hybrid features)
+- Includes new tasks for API server authorization and validation
+- Updates dependency graph to reflect ADR-006 integration work
 
 **Why This Is CRITICAL**:
-- ❌ Without re-orchestration, the old workflow omits hybrid auth and PEMS entity restrictions
-- ✅ Re-orchestration ensures tasks like "Implement orphan detection" are scheduled
-- ✅ New AI hooks, UX badges, and security tests are enforced in workflow
+- ❌ Without re-orchestration, the old workflow omits API server permission checks
+- ✅ Re-orchestration ensures tasks like "Implement API server authorization middleware" are scheduled
+- ✅ New tests for multi-tenant isolation and org status cascading are enforced in workflow
 
 **Expected Workflow Changes**:
-- Phase 1 will include new database fields (externalId, isExternal, assignmentSource, isCustom)
-- Phase 2 will include hybrid auth service + JIT provisioning
-- Phase 5 will include CRUD restrictions + unlink endpoint
-- Phase 6-9 (AI) will include sync conflict and orphan detection use cases
-- Phase 10 (Testing) will include hybrid auth security tests
+- Phase 2 will include Task 2.3 (API server authorization middleware)
+- Phase 5 will include Tasks 5.3-5.4 (API server CRUD endpoints, org status validation)
+- Phase 10 (Testing) will include API server authorization tests, multi-tenant isolation tests
 
 ---
 
@@ -1176,34 +902,31 @@ Ensure backward compatibility: existing users/orgs default to local with no migr
 Use this checklist to track your progress:
 
 **Blueprint Updates**:
-- [ ] Step 1: DECISION.md updated (requirement #18 + database schema changes)
-- [ ] Step 2: AI_OPPORTUNITIES.md updated (Use Cases 26-27 added)
-- [ ] Step 3: UX_SPEC.md updated (PEMS badges, edit warnings, org settings)
-- [ ] Step 4: TEST_PLAN.md updated (hybrid auth tests, external entity tests, orphan detection)
-- [ ] Step 5: IMPLEMENTATION_PLAN.md updated (Phase 2 hybrid auth, Phase 5 CRUD restrictions)
+- [ ] Step 1: UX_SPEC.md updated (API Connectivity UI with permission indicators, org status badges)
+- [ ] Step 2: TEST_PLAN.md updated (API server authorization tests, org status cascading tests, multi-tenant isolation)
+- [ ] Step 3: IMPLEMENTATION_PLAN.md updated (Phase 2 authorization middleware, Phase 5 CRUD endpoints)
 - [ ] All changes committed to git
 
 **Re-Orchestration**:
 - [ ] Ran `/execute-adr 005`
 - [ ] New AGENT_WORKFLOW.md generated
-- [ ] Reviewed new tasks in workflow (should include hybrid auth, sync conflict, orphan detection)
-- [ ] Timeline adjusted (expect +3-5 days for hybrid features)
+- [ ] Reviewed new tasks in workflow (should include API server authorization, org status validation)
 - [ ] Ready to begin implementation
 
 **Documentation**:
-- [ ] Updated ADR-005 README.md status to "Scope Change: PEMS Hybrid Integration - In Progress"
+- [ ] Updated ADR-005 README.md status to "Scope Change: ADR-006 API Server Integration - In Progress"
 - [ ] Updated DEVELOPMENT_LOG.md with scope change note and rationale
-- [ ] Notified stakeholders of timeline impact
+- [ ] Notified stakeholders of timeline impact (+4-6 hours for integration work)
 
 ---
 
 ## 📚 Related Documentation
 
 - **Original Decision**: [ADR-005-DECISION.md](./ADR-005-DECISION.md)
-- **AI Opportunities**: [ADR-005-AI_OPPORTUNITIES.md](./ADR-005-AI_OPPORTUNITIES.md)
 - **UX Specification**: [ADR-005-UX_SPEC.md](./ADR-005-UX_SPEC.md)
 - **Test Plan**: [ADR-005-TEST_PLAN.md](./ADR-005-TEST_PLAN.md)
 - **Implementation Plan**: [ADR-005-IMPLEMENTATION_PLAN.md](./ADR-005-IMPLEMENTATION_PLAN.md)
+- **ADR-006 Integration**: [../ADR-006-api-server-and-endpoint-architecture/](../ADR-006-api-server-and-endpoint-architecture/)
 
 ---
 

@@ -1,1452 +1,578 @@
-# CLAUDE.md - AI Assistant Guide
+# CLAUDE.md - AI Context Router
 
-> **Purpose**: Comprehensive guidance for AI assistants working on the PFA Vanguard codebase. Read this first before making any code changes.
+AI instruction manual for PFA Vanguard codebase.
 
 ---
 
-## 🚀 AI Assistant Quick Start (READ THIS FIRST)
+## Context Anchors (Read Before Acting)
 
-### Critical Rules - Never Violate These
+**Single Source of Truth Files**:
 
-| Rule | Why | Consequence |
-|------|-----|-------------|
-| **1. Read [DOCUMENTATION_STANDARDS.md](./docs/DOCUMENTATION_STANDARDS.md) before first commit** | Defines commit timing, README maintenance, git workflow | Improper commits, broken git history |
-| **2. Read [CODING_STANDARDS.md](./docs/CODING_STANDARDS.md) before writing code** | TypeScript strict mode, 20-line rule, React patterns | Poor code quality, security issues |
-| **3. Never mutate `allPfaRef` without `updatePfaRecords()` wrapper** | Breaks undo/redo history, doesn't trigger re-render | UI desync, lost undo capability |
-| **4. Always use `apiClient` service for API calls** | Handles JWT token with correct localStorage key | 401 errors, auth failures |
-| **5. Commit BEFORE major refactoring, AFTER functionality works** | Safety checkpoint + working code in git | Lost work, broken history |
-| **6. Update README.md when functionality changes** | Users must see current features | Outdated documentation |
-| **7. Use `temp/` folder for all temporary files** | Prevents codebase clutter | Messy repository |
+- **Code Style**: `docs/CODING_STANDARDS.md` (Strict Mode, 20-line limit, No `any`, React patterns, Security)
+- **Documentation**: `docs/DOCUMENTATION_STANDARDS.md` (Update logs, folder structure, no doc sprawl)
+- **Architecture**: `docs/ARCHITECTURE.md` (Complete system design)
+- **ADRs**: `docs/adrs/README.md` (blueprint structure, lifecycle commands)
+- **API Reference**: `docs/backend/API_REFERENCE.md` (All backend endpoints)
+- **Development Log**: `docs/DEVELOPMENT_LOG.md` (Track all implementation work here)
 
-### Common Gotchas
+## The Twelve Iron Rules - NEVER VIOLATE THESE
 
+### Rule 1: Documentation-First
+**Update `docs/ARCHITECTURE.md` BEFORE implementing architectural changes.**
+- Architecture describes intent; code implements it.
+- **Critical:** If you change a core pattern, update the architecture doc first.
+- If you change an API contract, update `docs/backend/API_REFERENCE.md` before writing the controller.
+
+### Rule 2: No File Sprawl
+**Never create new top-level documentation files.**
+- **Exception:** ADRs in `docs/adrs/` (must follow the 7-doc blueprint).
+- Do not create `PLAN.md`, `TODO.md`, or `STATUS.txt`. Use `docs/DEVELOPMENT_LOG.md`.
+- Keep the root clean: Only `CLAUDE.md`, `README.md`, config files (vite, tsconfig, package.json).
+
+### Rule 3: Living Documentation
+**All documentation must be updated in real-time.**
+- When you create/modify features → Update `docs/DEVELOPMENT_LOG.md`.
+- When you run tests → Update `docs/TESTING_LOG.md`.
+- When you add a script → Update `backend/scripts/README.md`.
+- **Constraint:** A task is not "Done" until the log entry is "LOCKED".
+
+### Rule 4: One Component, One Responsibility
+**Strict separation of concerns in file structure.**
+- **Frontend:** One major component per file (e.g., `Timeline.tsx`). Small sub-components can stay if local.
+- **Backend:** One controller per domain, one service per domain.
+- **Styles:** Use Tailwind utility classes; do not create separate CSS files unless absolutely necessary.
+
+### Rule 5: Update, Don't Duplicate
+**Refactor in place; never create versioned copies.**
+- **Never** create `Timeline_v2.tsx`, `authService_new.ts`, or `schema_backup.prisma`.
+- Git preserves history. Rely on it.
+- If a major refactor is risky, use a feature branch.
+
+### Rule 6: Archive Obsolete, Don't Delete
+**When major features or scripts become obsolete:**
+- Move to `docs/archive/` (for docs) or `backend/scripts/archive/` (for scripts).
+- Update the relevant `README.md` to note the archival.
+- **Exception:** Code that is simply refactored/replaced should be overwritten.
+
+### Rule 7: Check First, Create Second
+**Before writing new scripts or utilities:**
+- **Check** `backend/scripts/` and `utils.ts` first.
+- **Reuse** existing logic if possible.
+- **Generalize** existing scripts if they are close to what you need.
+- Only create new if strictly necessary, following naming conventions.
+
+### Rule 8: Single Source of Truth for Database (CRITICAL)
+**`backend/prisma/schema.prisma` is the ONLY source of truth for the database.**
+- **ALL** schema changes MUST be made in `schema.prisma`.
+- **DO NOT** manually edit migration SQL files.
+- **Workflow:** Modify `schema.prisma` → Run `npx prisma migrate dev`.
+
+### Rule 9: Zero Fluff, Pure Signal
+**Responses must be concise, technical, and direct.**
+- **No Conversational Filler:** Skip "Here is the code" or "I hope this helps."
+- **No Marketing Speak:** Avoid "powerful," "seamless," "state-of-the-art." Use technical terms.
+- **Code Over Prose:** Prioritize code blocks over long explanations.
+
+### Rule 10: Executive-Style Summaries
+**Summaries must be high-density and skimmable.**
+- **Structure:** Use bullet points and active verbs ("Added", "Fixed", "Removed").
+- **No Storytelling:** Do not write "We decided to do X because..." unless in an ADR. Just state "Implemented X."
+- **Context:** Assume the reader is a domain expert. Do not re-explain core concepts.
+- **Link Heavy:** Always cross-reference IDs (`[DEV-XXX]`, `[ADR-XXX]`) rather than describing them.
+
+### Rule 11: No Placeholders, No Shortcuts
+**Code must be fully implemented and strictly type-safe.**
+- **No Build Hacks:** Never comment out code or use `any` just to fix a compilation error. Fix the root cause (update the Interface/Type).
+- **No Ghost Code:** Never leave `// TODO`, `// PENDING`, or `// ... rest of logic` in the final output. If a feature is in scope, build it completely.
+- **Full Context:** When updating a file, provide the *entire* modified function or component, not just the changed lines, to ensure context integrity.
+
+### Rule 12: Strict Thematic Consistency
+**Adhere rigidly to established UI/UX patterns and tokens.**
+- **No Magic Values:** Use defined Tailwind utility classes and theme tokens (colors, spacing). Do not hardcode hex codes or arbitrary pixels.
+- **Pattern Matching:** If adding a button, match the existing `Button` component patterns (props, variants). Do not invent new styles unless explicitly requested.
+- **Visual Integrity:** New features must look indistinguishable from the existing application core.
+
+---
+
+## Tech Stack
+
+**Frontend:**
+- **Core:** React 19, TypeScript, Vite 5
+- **Styling:** Tailwind CSS (Utility-first, no CSS-in-JS)
+- **State/Fetch:** Context API, TanStack Query (React Query)
+- **Testing:** Vitest, React Testing Library
+
+**Backend:**
+- **Runtime:** Node.js (v18+), Express.js 4.x
+- **Database:** Prisma 5.x (ORM), PostgreSQL (Docker for Dev, Local Install for Prod)
+- **Caching/Queues:** Redis (Session kill-switch, Notification batching)
+- **Validation:** Zod (Strict schema validation)
+- **Logic:** Math.js (KPI formulas)
+
+**Quality & Standards:**
+- **Linting:** ESLint (Strict: no unused vars, no implicit any)
+- **Formatting:** Prettier (Single quotes, 2-space indent)
+- **Type Safety:** TypeScript Strict Mode (noUnusedLocals: true)
+
+**Infrastructure:**
+- **Auth:** JWT (Stateless) + bcrypt
+- **AI:** Google Gemini (Primary), OpenAI GPT-4, Anthropic Claude
+- **External:** PEMS (HxGN EAM) API
+
+---
+
+## Recent Architectural Decisions (ADRs)
+
+> **📖 Always check `docs/adrs/README.md` for the current status of Architectural Decision Records.**
+
+## Critical Architecture Gotchas
+
+> **⚠️ Project-Specific Patterns**: These are unique to PFA Vanguard's architecture. For general coding rules, see `docs/CODING_STANDARDS.md`.
+
+### 1. Sandbox Pattern - NEVER Mutate `allPfaRef` Directly
+
+**Wrong:**
 ```typescript
-// ❌ WRONG - Direct ref mutation
 allPfaRef.current = allPfaRef.current.map(a => ({ ...a, category: 'New' }));
+```
 
-// ✅ CORRECT - Use updatePfaRecords wrapper
+**Correct:**
+```typescript
 updatePfaRecords(prev => prev.map(a => ({ ...a, category: 'New' })));
+```
 
-// ❌ WRONG - Manual fetch with wrong token key
+**Why:** Direct mutation breaks undo/redo history and doesn't trigger re-render.
+
+### 2. Auth - NEVER Use Manual `fetch()`
+
+**Wrong:**
+```typescript
 const token = localStorage.getItem('token'); // Wrong key!
+fetch('/api/pems/sync', { headers: { 'Authorization': `Bearer ${token}` } });
+```
 
-// ✅ CORRECT - Use apiClient service
+**Correct:**
+```typescript
 const data = await apiClient.syncPemsData(organizationId, 'full');
-
-// ❌ WRONG - Admin menu in AdminDashboard.tsx
-<AdminDashboard onAddMenuItem={...} /> // Wrong location
-
-// ✅ CORRECT - Admin menu in App.tsx
-<MenuItem label="Feature" icon={Icon} onClick={() => setAppMode('feature')} />
 ```
 
-### Quick Navigation
+**Why:** Token stored as `'pfa_auth_token'`, not `'token'`. `apiClient` handles this.
 
-| I need to... | See this section |
-|--------------|------------------|
-| Understand the domain (PFA = Plan/Forecast/Actuals) | [Essential Domain Concepts](#essential-domain-concepts) |
-| Learn sandbox pattern (refs + undo/redo) | [Critical Architecture Patterns](#critical-architecture-patterns) |
-| Find a specific component or service | [Key Files](#key-files) |
-| Add a field, filter, or bulk operation | [Common Tasks](#common-tasks) |
-| Understand PEMS sync and database architecture | [PEMS Data Synchronization](#pems-data-synchronization) |
-| Fix a bug or performance issue | [Known Issues](#known-issues) |
-| Prepare for production deploy | [Production Checklist](#production-checklist) |
-| Create scripts or tests | [Temporal Files, Scripts & Test Organization](#temporal-files-scripts--test-organization) |
+### 3. Admin Menu - Add to `App.tsx`, NOT `AdminDashboard.tsx`
 
+**Location:** `App.tsx` lines ~751-758 (menu items), ~950-960 (render logic)
+
+### 4. PFA Lifecycle - Plan is Immutable
+
+```
+PLAN (originalStart/End) [locked]
+  ↓
+FORECAST (forecastStart/End) [editable]
+  ↓
+ACTUAL (actualStart/End) [billing reality]
+```
+
+**Rule:** Plan never changes. Variance = Forecast/Actual vs Plan.
+
+### 5. Cost Calculation - Rental vs Purchase
+
+**Rental:** `(days / 30.44) × monthlyRate`
+**Purchase:** `purchasePrice` (duration irrelevant)
+
+**Implementation:** `frontend/utils.ts: calculateCost()`
+
+### 6. Drag-and-Drop - Use `dragOverrides` Map
+
+**During drag:** Store in `dragOverrides` Map (no data mutation)
+**On drop:** Apply via `onUpdateAssets()` callback
+
+**Why:** Smooth multi-item drag without mutating data until drop.
+
+### Notification System (Event-Driven)
+**Pattern:** Event Bus -> Smart Router -> Multi-Channel Delivery
+1.  **Emit:** `eventBus.emit('pfa.sync.failed', payload)` (backend/services/NotificationEventBus.ts)
+2.  **Route:** Router applies batching (60s window) and Quiet Hours.
+3.  **Deliver:** To Email, In-App, Slack, Teams based on `UserNotificationPreferences`.
+**Constraint:** Never send notifications directly from controllers. Use the Event Bus.
+
+### 7. Extensibility Pattern - JSONB vs Columns (ADR-005)
+**Rule:** Do NOT add columns for UI toggles, user preferences, or org settings.
+* **Security/Filtering:** Use **Boolean Columns** (e.g., `perm_Read`, `isActive`).
+* **Settings/Features:** Use **JSONB Columns** (e.g., `settings`, `preferences`, `capabilities`).
+* **Dropdown Options:** Use **SystemDictionary** table (not hardcoded enums).
 ---
 
-## 📖 Documentation Standards
+## Domain Concepts
 
-> **⚠️ MANDATORY: Read these before making any changes**
-
-**[Documentation Standards](./docs/DOCUMENTATION_STANDARDS.md)** - Git workflow, commit conventions, README maintenance
-- **Section 11**: When to commit (before major changes, after functionality works)
-- **Section 12**: README.md maintenance rules (must always reflect current features)
-- **Section 17**: Temporal files (`temp/`), script naming, test organization
-
-**[Coding Standards](./docs/CODING_STANDARDS.md)** - Enterprise-grade code quality
-- **Section 3**: TypeScript standards (strict mode, no `any`, explicit return types)
-- **Section 5**: React patterns (functional components, hooks, 20-line function rule)
-- **Section 8**: Backend patterns (service layer, error handling, validation)
-- **Section 11**: Security practices (input validation, secrets management)
-
-**All agents and development sessions MUST follow these standards.**
-
----
-
-## Table of Contents
-
-### 🎯 Essential Reading
-1. [AI Assistant Quick Start](#-ai-assistant-quick-start-read-this-first) ← Start here
-2. [Project Overview](#project-overview)
-3. [Essential Domain Concepts](#essential-domain-concepts)
-4. [Critical Architecture Patterns](#critical-architecture-patterns)
-
-### 📂 Implementation Guide
-5. [Key Files](#key-files)
-6. [Project Folder Structure](#project-folder-structure)
-7. [Common Tasks](#common-tasks)
-8. [Temporal Files, Scripts & Test Organization](#temporal-files-scripts--test-organization)
-
-### 🔧 Operations & Deployment
-9. [PEMS Data Synchronization](#pems-data-synchronization)
-10. [Authentication & Security](#authentication--security)
-11. [Known Issues](#known-issues)
-12. [Production Checklist](#production-checklist)
-13. [Git & GitHub Best Practices](#git--github-best-practices)
-
-### 🎨 Design & Testing
-14. [Visual Development & Testing](#visual-development--testing)
-15. [External Resources](#external-resources)
-
-## Quick Start
-
-```bash
-# Frontend Setup
-npm install
-
-# Backend Setup
-cd backend
-npm install
-
-# Setup database and seed initial data
-npm run prisma:migrate
-npm run prisma:seed
-
-# Configure environment variables
-# Copy .env.example to .env and configure
-cp .env.example .env
-
-# Start backend server (port 3001)
-npm run dev
-
-# In new terminal, start frontend (port 3000)
-cd ..
-npm run dev
+### PFA Lifecycle
 ```
-
-**Login Credentials**:
-- Username: `admin`
-- Password: `admin123`
-
-**Architecture**: Full-stack application with Express backend + SQLite database + React frontend
-
-## Project Overview
-
-**PFA Vanguard** is a construction equipment tracking system for large industrial projects. It manages the **Plan → Forecast → Actuals** lifecycle for 10,000+ equipment requirements.
-
-**Core Purpose**: Help Project Managers ensure actual equipment costs don't exceed budgeted amounts by adjusting forecasts to navigate the gap.
-
-**Tech Stack**:
-- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
-- **Backend**: Express.js + Prisma ORM + SQLite (dev) / PostgreSQL (prod)
-- **AI Integration**: Google Gemini AI + OpenAI + Anthropic Claude
-- **Authentication**: JWT tokens + bcrypt password hashing
-
-**Data Scale**: 20,280 PFA records + 3,735 asset master records
-
----
-
-### 🧠 Mental Model - System Architecture at a Glance
-
+ESS → PLAN [locked] → FORECAST [editable] → ACTUAL [billing]
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  USER WORKFLOW: PM needs to adjust equipment forecast dates     │
-│  to keep project under budget                                   │
-└─────────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────────┐
-│  FRONTEND (React + TypeScript)                                  │
-│  ├─ App.tsx: Sandbox pattern (allPfaRef + undo/redo)           │
-│  ├─ Timeline.tsx: Drag-and-drop Gantt chart                     │
-│  ├─ CommandDeck.tsx: Bulk operations (shift dates, change DOR)  │
-│  └─ FilterPanel.tsx: Reduce 20K records to relevant subset      │
-└─────────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────────┐
-│  BACKEND (Express.js + Prisma)                                  │
-│  ├─ JWT Authentication (token in localStorage as 'pfa_auth_token') │
-│  ├─ PemsSyncService: Bi-directional sync with PEMS Grid API    │
-│  ├─ DataSourceOrchestrator: API switching with fallback        │
-│  └─ PostgreSQL: 1M+ PFA records with change tracking           │
-└─────────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────────┐
-│  EXTERNAL SYSTEMS                                               │
-│  ├─ PEMS (HxGN EAM): Source of truth for equipment data        │
-│  ├─ AI Providers: Gemini/OpenAI/Claude for natural language    │
-│  └─ ESS/Procurement: Future integrations for Plan/Actuals      │
-└─────────────────────────────────────────────────────────────────┘
-```
+**Active Organizations:** `RIO` (Rio Tinto), `PORTARTHUR` (Port Arthur).
+* *Note:* `HOLNG` and `PEMS_Global` were removed (Nov 25). Do not reference them.
 
-**Key Architecture Decisions**:
-- **Sandbox Pattern**: Dual-ref (allPfaRef + baselinePfaRef) enables 20-level undo without re-render spam
-- **State Tracking**: Database tracks `syncState` (pristine/modified/pending_sync) for bi-directional sync
-- **Organization Isolation**: Multi-tenant with `organizationId` filtering on all queries
-- **Drag-and-Drop**: `dragOverrides` Map for live preview without data mutation until drop
+### Data Source Orchestration
+**Mapping System:** Entities (PFA, Assets) are decoupled from API configs via `DataSourceMapping` table.
+**Usage:**
+* **Never** hardcode API selection logic.
+* **Always** use `DataSourceOrchestrator.getActiveDataSource(entityType, orgId)`.
+* **Fallback:** System automatically checks Org-specific mapping -> Global mapping.
 
-**Critical Data Flow**:
-```
-PEMS Read API → Database (pristine) → User Edit → allPfaRef (modified) → Commit → Database → PEMS Write API
-```
 
----
+### Key Fields
 
-## Essential Domain Concepts
-
-### PFA = Plan, Forecast, Actuals
-
-A **PfaRecord** represents one equipment requirement evolving through three states:
-
-```
-ESS (Estimation System)
-    ↓ CSV Import
-PLAN (originalStart/End) ← Locked budget baseline (immutable)
-    ↓ Copied to Forecast
-FORECAST (forecastStart/End) ← PM strategy (editable in this app)
-    ↓ Equipment arrives on-site
-ACTUAL (actualStart/End) ← Billing reality (imported from Procurement)
-```
-
-**Critical Rule**: Plan never changes. Variance = Forecast/Actual vs. Plan.
-
-### Key Field Groups
-
-**Timeline Fields** (`PfaRecord`):
+**Timeline:**
 - `originalStart/End`: Budget baseline (locked)
-- `forecastStart/End`: PM strategy (drag-and-drop editable)
-- `actualStart/End`: Billing reality (imported, `isActualized = true`)
+- `forecastStart/End`: PM strategy (drag-and-drop)
+- `actualStart/End`: Billing reality (`isActualized = true`)
 
-**Financial Fields**:
-- `source`: 'Rental' (uses `monthlyRate`) or 'Purchase' (uses `purchasePrice`)
-- `dor`: 'BEO' (general overhead) or 'PROJECT' (specific charge code)
+**Financial:**
+- `source`: 'Rental' or 'Purchase'
+- `dor`: 'BEO' (overhead) or 'PROJECT' (charge code)
+- `monthlyRate`: For rentals
+- `purchasePrice`: For purchases
 
-**Status Flags**:
-- `isActualized`: Equipment on-site and billing (`true` = orange bars on timeline)
-- `isDiscontinued`: Requirement cancelled (`true` = hidden from default views)
-- `isFundsTransferable`: Budget donor (`true` = can reallocate funds to other PFAs)
+**Status:**
+- `isActualized`: On-site billing (orange bars)
+- `isDiscontinued`: Cancelled (hidden by default)
+- `isFundsTransferable`: Budget donor
 
-### Cost Calculation Logic
+### Permission System (ADR-005 Implementation)
 
-**Rental**: `Cost = (days / 30.44) × monthlyRate`
-**Purchase**: `Cost = purchasePrice` (duration irrelevant)
+**Access Control Model**: Hybrid Role-Override Architecture
+- Users assigned to one or more organizations via `UserOrganization` junction table
+- Each assignment has 14 boolean permission flags
+- Permissions can be set via Role template OR per-user override
 
-See `utils.ts: calculateCost()` for implementation.
+**Permission Categories**:
+```typescript
+// Data Scope (4 flags)
+perm_Read: boolean              // View PFA records
+perm_EditForecast: boolean      // Modify forecast dates/costs
+perm_EditActuals: boolean       // Modify actual dates/costs (rare)
+perm_Delete: boolean            // Soft delete PFA records
 
-## Critical Architecture Patterns
+// Data Operations (3 flags)
+perm_Import: boolean            // CSV import
+perm_RefreshData: boolean       // Trigger PEMS sync
+perm_Export: boolean            // Excel export
 
-> **🎯 Purpose**: These patterns solve core business problems and are used throughout the codebase. Understanding these is essential for making effective code changes.
+// Financials (1 flag)
+perm_ViewFinancials: boolean    // See cost/budget data (compliance)
 
-**Quick Reference**:
+// Process (2 flags)
+perm_SaveDraft: boolean         // Save uncommitted changes
+perm_Sync: boolean              // Push changes to PEMS
 
-| Pattern | Problem Solved | Key Files | Critical Rule |
-|---------|----------------|-----------|---------------|
-| **Sandbox** | Experiment without affecting production data | App.tsx | Never mutate `allPfaRef` directly |
-| **Smart Bulk Ops** | Different logic for Forecast vs. Actual | CommandDeck.tsx | Can't move actual start dates backward |
-| **Drag Preview** | Smooth multi-item drag without mutation | Timeline.tsx | Use `dragOverrides` Map |
-| **Multi-Org Isolation** | Multiple projects in one system | App.tsx, backend | Filter by `organizationId` |
-| **Dynamic Forms** | Rental vs. Purchase fields differ | Various components | Conditional rendering on `source` |
+// Admin (4 flags)
+perm_ManageUsers: boolean       // User/org management
+perm_ManageSettings: boolean    // System configuration
+perm_ConfigureAlerts: boolean   // Notification rules
+perm_Impersonate: boolean       // "View as" other users
+```
+
+**Backend Enforcement**:
+- Middleware: `requirePermission('Read')` checks `UserOrganization` table
+- API Server Access: `requireApiServerPermission(serverId, action)` for PEMS sync
+- Audit: All permission checks logged to `AuditLog`
+
+**Frontend Usage**:
+```tsx
+<PermissionGuard requires="EditForecast">
+  <button onClick={handleSave}>Save Changes</button>
+</PermissionGuard>
+
+// Or programmatic check
+const { hasPermission } = usePermissions();
+if (hasPermission('ViewFinancials')) {
+  showCostColumn();
+}
+```
+
+**Special Cases**:
+- **Impersonation**: `User.impersonatingUserId` set during session, all actions audited
+- **Financial Masking**: If `!perm_ViewFinancials`, cost fields return `null`
+- **Temporal Access**: `UserOrganization.accessExpiresAt` auto-disables on expiry
+- **Session Kill**: `UserSession.invalidatedAt` revokes JWT token server-side
 
 ---
 
-### 1. Sandbox Pattern (Simulation Mode)
+## File Map
 
-**Problem**: PMs need to experiment ("What if I cut all rentals by 10%?") without affecting production data.
-
-**Solution**: Dual-ref architecture
-- `allPfaRef.current`: Working sandbox (all edits happen here)
-- `baselinePfaRef.current`: Committed truth (reset point)
-- `visiblePfaRecords`: State-based filtered data for rendering
-
-```tsx
-// All mutations flow through this pattern
-const updatePfaRecords = (fn: (assets: PfaRecord[]) => PfaRecord[]) => {
-  pushHistory(); // Save current state for undo
-  allPfaRef.current = fn(allPfaRef.current); // Mutate sandbox
-  setDataVersion(v => v + 1); // Trigger re-render
-};
-
-// Discard experimental changes
-const handleDiscardChanges = () => {
-  allPfaRef.current = cloneAssets(baselinePfaRef.current); // Reset
-};
-
-// Commit changes to baseline
-const handleSubmitChanges = () => {
-  baselinePfaRef.current = cloneAssets(allPfaRef.current); // Commit
-};
-```
-
-**Why Refs**: Enables 20-level undo/redo history without triggering re-renders on intermediate states.
-
-**Memory Warning**: Each history snapshot clones ~20K records. Consider diff-based history for production.
-
-### 2. Smart Bulk Operations
-
-**Problem**: Weather delay shuts down "Silo 4" for 14 days. Need to adjust 600 equipment lines, but logic differs by state.
-
-**Solution**: State-aware bulk operations in `CommandDeck.tsx`
-
-```tsx
-// Forecasts: Shift both start and end dates
-// Actuals: Can't change past start date, only extend end date
-onShiftTime={(days) => updatePfaRecords(prev =>
-  prev.map(a => selectedIds.has(a.id)
-    ? a.isActualized
-      ? { ...a, actualEnd: addDays(a.actualEnd, days) }      // Actuals: extend only
-      : { ...a, forecastStart: addDays(a.forecastStart, days),  // Forecasts: shift both
-                forecastEnd: addDays(a.forecastEnd, days) }
-    : a
-  )
-)}
-```
-
-### 3. Drag-and-Drop with Live Preview
-
-**Problem**: Dragging 10+ timeline bars simultaneously requires smooth preview without data mutation until drop.
-
-**Solution**: `dragOverrides` Map in `Timeline.tsx`
-
-```tsx
-// During drag: Store overrides in Map (no data mutation)
-const [dragOverrides, setDragOverrides] = useState<Map<string, DragUpdate>>(new Map());
-
-// On drop: Apply overrides via onUpdateAssets callback
-const handleMouseUp = () => {
-  if (dragOverrides.size > 0) {
-    onUpdateAssets(Array.from(dragOverrides.entries()).map(([id, update]) => ({
-      id, start: update.start, end: update.end, layer: update.layer
-    })));
-  }
-  setDragOverrides(new Map()); // Clear
-};
-```
-
-### 4. Multi-Organization Isolation
-
-Each construction project is an "Organization" (e.g., HOLNG, PEMS_Global).
-
-**Pattern**:
-- Users have `allowedOrganizationIds[]` (can access multiple projects)
-- `currentUser.organizationId` = active context
-- All data filtered by `organization` field
-- Each org has isolated filters: `orgSpecificFilters[orgId]`
-
-**Switching Context**: `handleSwitchContext(newOrgId)` updates active org and restores that org's filters.
-
-### 5. Dynamic Form Fields (Rent vs. Buy)
-
-**Problem**: Rental uses `monthlyRate`, Purchase uses `purchasePrice`. Form fields must change.
-
-**Solution**: Conditional rendering based on `source` field
-
-```tsx
-{source === 'Rental' && (
-  <input type="number" name="monthlyRate" placeholder="Monthly Rate" />
-)}
-{source === 'Purchase' && (
-  <input type="number" name="purchasePrice" placeholder="Purchase Price" />
-)}
-```
-
-KPI Board recalculates instantly using `calculateCost()` which branches on `source`.
-
-## Key Files
-
-### Core State Management
-
-**`App.tsx`** (890 lines)
-- Root state manager implementing sandbox pattern
-- Critical functions:
-  - `updatePfaRecords()`: All mutations flow here
-  - `pushHistory()`: Undo/redo stack management
-  - `handleSubmitChanges()`: Commit sandbox to baseline
-  - `handleDiscardChanges()`: Reset sandbox
-  - `handleDataImport()`: CSV import orchestration
-- **Warning**: Uses refs for state (not standard React pattern)
-
-**`types.ts`** (336 lines)
-- All TypeScript interfaces
-- `PfaRecord`: Core data model with Plan/Forecast/Actual fields
-- `FilterState`: Organization-specific filter configuration
-- `DragState`: Drag-and-drop state management
-
-**`utils.ts`** (294 lines)
-- Business logic calculations
-- `calculateCost()`: Rental vs. Purchase cost logic
-- `aggregateCosts()`: Sum totals for KPI Board
-- `groupAssets()`: Hierarchical rollup for variance analysis
-- `getTimelineBounds()`: Timeline viewport calculation
-
-### Visualization Components
-
-**`Timeline.tsx`** (~500 lines)
-- Gantt chart with drag-and-drop
-- Multi-layer rendering (Plan=blue, Forecast=green, Actual=orange)
-- `dragOverrides` Map for live preview
-- Scale switching (Day/Week/Month/Year)
-
-**`MatrixView.tsx`** (~400 lines)
-- Month-by-month cost breakdown
-- Displays cost/duration/quantity metrics
-- Grouping support for category/class rollups
-
-**`GridLab.tsx`** (~200 lines)
-- Tabular view with virtual scrolling
-- Efficient for 20K+ records (renders only visible rows)
-- Sortable columns, multi-select
-
-### Operation Components
-
-**`CommandDeck.tsx`** (~400 lines)
-- Bulk operations center
-- Key operations:
-  - Shift Time (smart logic for Forecast vs. Actual)
-  - Adjust Duration
-  - Change Category/DOR
-  - Equipment Assignment (link to Asset Master)
-  - Reset to Plan
-- Enforces business rules (e.g., can't move actual start dates backward)
-
-**`FilterPanel.tsx`** (~300 lines)
-- Reduces 20K records to relevant subset
-- Multi-select filters (category, class, DOR, source, area)
-- Date range filters
-- Status filters (Forecast, Actuals, Discontinued, Funds Transferable)
-- Focus mode (hide unselected)
-
-**`KpiBoard.tsx`** (~200 lines)
-- Variance metrics dashboard
-- Displays: Total Plan, Total Forecast, Total Actual, Delta
-- Color coding: Red = over budget, Green = under budget
-
-### AI & Admin
-
-**`AiAssistant.tsx`** (~600 lines)
-- Google Gemini integration
-- Panel mode (chat) and Voice mode (speech-to-text/TTS)
-- Natural language queries: "Show me rentals over $5000 in Silo 4"
-- Confirmation required for mutations
-- Configured via `Organization.aiRules[]` and `SystemConfig.aiGlobalRules[]`
-
-**`AdminDashboard.tsx`** (~400 lines)
-- System administration console
-- User/Org/API management
-- CSV import orchestration
-- Master data CRUD (Asset Master, Classifications)
-- Field mapping configuration
-
-### Data Files
-
-**`mockData.ts`** (520K lines, 20,280 PFA records)
-- Generated from CSV files via `generateMockData.js`
-- Contains: `STATIC_PFA_RECORDS`, `STATIC_ASSET_MASTER`, `STATIC_CLASSIFICATION`
-- **Warning**: Large file causes slow initial loads
-
-**`generateMockData.js`** (in project root)
-- Script to regenerate mockData.ts from CSV
-- Run: `node generateMockData.js`
-- Sources: `PFA.csv` (20,280 records), `assets.csv` (3,735 records), `class_cat.csv` (1,163 records)
-
-## Project Folder Structure
-
+### Project Structure
 ```
 PFA2.2/
-├── backend/                    # Express.js backend API
-│   ├── prisma/
-│   │   ├── schema.prisma      # Database schema (Users, Orgs, PFA, AI, APIs)
-│   │   ├── migrations/        # Database migrations
-│   │   ├── seed.ts            # Seed data (admin user, orgs, AI providers)
-│   │   └── dev.db             # SQLite database (development)
-│   ├── src/
-│   │   ├── config/            # Environment and database config
-│   │   ├── controllers/       # Route controllers (auth, AI, PEMS, APIs)
-│   │   ├── middleware/        # Authentication, rate limiting
-│   │   ├── models/            # Business logic models
-│   │   ├── routes/            # API route definitions
-│   │   ├── services/          # Business services (auth, AI, encryption)
-│   │   ├── types/             # TypeScript types
-│   │   ├── utils/             # Utilities (logger, encryption)
-│   │   └── server.ts          # Express app entry point
-│   ├── .env                   # Backend environment variables
-│   └── package.json           # Backend dependencies
-│
-├── components/                # React UI components
-│   ├── admin/                 # Admin dashboard components
-│   │   ├── ApiConnectivity.tsx    # PEMS & AI API management
-│   │   ├── ApiManager.tsx         # API config CRUD
-│   │   └── SystemManager.tsx      # System settings
-│   ├── AdminDashboard.tsx     # Main admin panel
-│   ├── CommandDeck.tsx        # Bulk operations UI
-│   ├── FilterPanel.tsx        # Multi-dimensional filters
-│   ├── GridLab.tsx            # Tabular data view
-│   ├── KpiBoard.tsx           # Variance dashboard
-│   ├── LoginScreen.tsx        # Authentication UI
-│   ├── MatrixView.tsx         # Month-by-month breakdown
-│   └── Timeline.tsx           # Gantt chart with drag-and-drop
-│
-├── contexts/                  # React contexts
-│   └── AuthContext.tsx        # JWT authentication state
-│
-├── services/                  # Frontend API clients
-│   └── apiClient.ts           # HTTP client for backend API
-│
-├── .env.local                 # Frontend environment variables
-├── App.tsx                    # Main React app (sandbox pattern)
-├── mockData.ts                # Static PFA/Asset data (20K+ records)
-├── types.ts                   # Shared TypeScript types
-├── utils.ts                   # Business logic utilities
-└── package.json               # Frontend dependencies
+├── frontend/              # React frontend application
+│   ├── components/        # React components
+│   ├── contexts/          # React context providers
+│   ├── hooks/             # Custom React hooks
+│   ├── services/          # API client, query client
+│   ├── stores/            # Zustand stores
+│   ├── utils/             # Utility functions
+│   ├── tests/             # Frontend tests
+│   ├── App.tsx            # Root component
+│   ├── index.tsx          # Entry point
+│   ├── types.ts           # TypeScript interfaces
+│   └── utils.ts           # Business logic
+├── backend/               # Node.js backend
+│   ├── src/               # Source code
+│   ├── prisma/            # Database schema
+│   └── scripts/           # Utility scripts
+├── docs/                  # Documentation
+└── [config files]         # vite, tsconfig, package.json
 ```
 
-### Backend API Endpoints
+### Frontend Core
+- `frontend/App.tsx` (~890 lines): Root state, sandbox, undo/redo
+- `frontend/types.ts` (~336 lines): TypeScript interfaces
+- `frontend/utils.ts` (~294 lines): Business logic
 
-**Authentication**:
-- `POST /api/auth/login` - User login (returns JWT token)
-- `POST /api/auth/register` - Create user (admin only)
-- `POST /api/auth/verify` - Verify JWT token
+### Frontend Components
+- `frontend/components/Timeline.tsx` (~500 lines): Gantt chart
+- `frontend/components/MatrixView.tsx` (~400 lines): Month-by-month
+- `frontend/components/GridLab.tsx` (~200 lines): Tabular view
+- `frontend/components/KpiBoard.tsx` (~200 lines): Variance dashboard
+- `frontend/components/CommandDeck.tsx` (~400 lines): Bulk operations
+- `frontend/components/FilterPanel.tsx` (~300 lines): Multi-select filters
+- `frontend/components/AiAssistant.tsx` (~600 lines): Gemini integration
 
-**AI**:
-- `POST /api/ai/chat` - Send AI chat request
-- `GET /api/ai/usage` - Get AI usage statistics
+### Backend
+- `backend/src/server.ts`: Express entry
+- `backend/src/services/pems/PemsSyncService.ts`: Batch sync
+- `backend/src/controllers/pemsSyncController.ts`: Sync endpoints
+- `backend/prisma/schema.prisma`: Database schema
 
-**PEMS Integration**:
-- `GET /api/pems/configs` - Get PEMS configurations
-- `POST /api/pems/test` - Test PEMS connection
-- `POST /api/pems/sync` - Sync PFA data from PEMS
+### Permission System (ADR-005)
+- `backend/src/middleware/requirePermission.ts`: Permission enforcement
+- `backend/src/middleware/requireApiServerPermission.ts`: API server access control
+- `backend/src/middleware/auditContext.ts`: Audit trail middleware
+- `backend/src/controllers/userOrgController.ts`: User-org assignments
+- `backend/src/controllers/permissionExplanationController.ts`: Permission hints
+- `backend/src/controllers/auditController.ts`: Audit log queries
+- `backend/src/services/ai/PermissionExplanationService.ts`: AI permission hints
+- `backend/src/services/ai/PermissionSuggestionService.ts`: AI role suggestions
+- `backend/src/services/ai/RoleDriftDetectionService.ts`: Permission anomaly detection
+- `frontend/components/PermissionGuard.tsx`: Frontend permission wrapper
+- `frontend/components/PermissionButton.tsx`: Permission-aware buttons
+- `frontend/components/PermissionExplanationTooltip.tsx`: Permission hints UI
+- `frontend/components/admin/UserOrgPermissions.tsx`: Permission management UI
+- `frontend/components/admin/RoleDriftAlerts.tsx`: Anomaly detection UI
 
-**API Management**:
-- `GET /api/configs` - Get API configurations
-- `POST /api/configs` - Create API configuration
-- `PUT /api/configs/:id` - Update API configuration
-- `DELETE /api/configs/:id` - Delete API configuration
-- `POST /api/configs/:id/test` - Test API connection
-
-## Authentication & Security
-
-### Authentication Flow
-
-1. **User Login**:
-   - User enters username and password in `LoginScreen.tsx`
-   - Frontend sends POST request to `/api/auth/login` via `apiClient.ts`
-   - Backend validates credentials using bcrypt password hashing
-   - On success, backend returns JWT token + user data
-   - Frontend stores token in localStorage and user data in AuthContext
-
-2. **Authenticated Requests**:
-   - All API requests include `Authorization: Bearer <token>` header
-   - Backend middleware verifies JWT on protected routes
-   - Token contains userId, username, role, and organizationIds
-
-3. **Session Management**:
-   - JWT tokens expire after configured time (default: 7 days)
-   - Token stored in localStorage for persistence
-   - On app load, token is verified with `/api/auth/verify`
-   - Invalid/expired tokens trigger logout
-
-### Security Features
-
-**Password Security**:
-- Passwords hashed with bcrypt (10 rounds)
-- Stored as `passwordHash` in database (plaintext never stored)
-- Generic "Invalid credentials" error prevents username enumeration
-
-**JWT Token Security**:
-- Signed with secret key (stored in backend .env)
-- Contains minimal claims (no sensitive data)
-- Tokens validated on every protected API request
-
-**Database Security**:
-- User model includes `isActive` flag for account management
-- Role-based access control (admin, user, viewer)
-- Organization-level data isolation
-
-**API Security**:
-- CORS configured for allowed origins
-- Global rate limiting (100 requests/15 minutes per IP)
-- Request logging for audit trails
-
-**Credentials in Database**:
-- Admin user: `admin` / `admin123` (created via `prisma/seed.ts`)
-- Additional users can be created via `/api/auth/register` (admin only)
-- User credentials stored in `users` table with bcrypt hashes
-
-## PEMS Data Synchronization
-
-> **🎯 Purpose**: Bi-directional sync between PFA Vanguard and PEMS (HxGN EAM) for 1M+ equipment records across multiple organizations.
-
-**PFA Vanguard** integrates with **PEMS Grid Data API** (HxGN EAM) to synchronize PFA records, asset master data, and classification data from external construction management systems.
-
-**What You Need to Know**:
-
-| Aspect | Current State | Key Detail |
-|--------|---------------|------------|
-| **Read Sync** | ✅ Working | Fetch from PEMS → Store in PostgreSQL with change tracking |
-| **Write Sync** | 📋 Planned | Modified records → Push to PEMS (not yet implemented) |
-| **Scale** | 1M+ records | Batch processing: 10K API calls, 1K DB writes |
-| **Authentication** | JWT + apiClient | **Critical**: Use `apiClient` service, not manual `fetch()` |
-| **Progress Tracking** | Real-time | Frontend polls every 2 seconds for status updates |
-| **Database Architecture** | 3-tier hybrid | PostgreSQL + Redis (planned) + React state |
-
-**Critical Files**:
-- `backend/src/services/pems/PemsSyncService.ts` - Batch sync logic (read)
-- `backend/src/services/pems/PemsWriteService.ts` - Write sync (planned)
-- `backend/src/controllers/pemsSyncController.ts` - API endpoints
-- `components/admin/ApiConnectivity.tsx` - Sync UI
-- `services/apiClient.ts` - HTTP client with JWT handling
-
-**Common Issues**:
-- ❌ 401 errors → Using wrong localStorage key or manual `fetch()`
-- ❌ Sync button not visible → `feeds` field is NULL in database
-- ❌ Performance issues → Adjust `PAGE_SIZE` or `BATCH_SIZE`
+### AI Integration (ADR-005)
+- `backend/src/services/ai/NaturalLanguagePermissionService.ts`: NL permission queries
+- `backend/src/services/ai/FinancialMaskingService.ts`: AI-powered financial masking
+- `backend/src/services/ai/FinancialAccessMonitoringService.ts`: Financial access tracking
+- `backend/src/services/ai/SemanticAuditSearchService.ts`: NL audit log search
+- `backend/src/services/ai/NotificationTimingService.ts`: Smart notification timing
+- `backend/src/services/ai/BeoAnalyticsService.ts`: BEO portfolio analytics
+- `frontend/components/admin/SemanticAuditSearch.tsx`: NL audit search UI
+- `frontend/components/admin/NLQueryInput.tsx`: Natural language input
 
 ---
-
-### Sync Architecture
-
-**Key Components**:
-- **Backend Service**: `backend/src/services/pemsSyncService.ts` - Handles batch processing and API calls
-- **Controller**: `backend/src/controllers/pemsSyncController.ts` - REST endpoints for sync operations
-- **Database Schema**: Sync tracking fields in `ApiConfiguration` model
-- **Frontend UI**: `components/admin/ApiConnectivity.tsx` - Sync button and progress tracking
-
-**Sync Flow**:
-```
-1. User clicks "Sync Data" button in API Connectivity UI
-2. Frontend calls POST /api/pems/sync with organizationId and syncType
-3. Backend starts sync in background (non-blocking)
-4. Frontend polls GET /api/pems/sync/:syncId for progress updates
-5. Backend processes data in batches (10,000 records/API call, 1,000 records/DB batch)
-6. On completion, sync statistics saved to ApiConfiguration table
-7. UI displays updated sync metrics (first sync, last sync, record counts)
-```
-
-### Sync Tracking Fields
-
-Added to `ApiConfiguration` schema (migration `20251125040401_add_sync_tracking_fields`):
-
-```prisma
-model ApiConfiguration {
-  // ... existing fields ...
-
-  // Sync Tracking (for APIs with feeds configured)
-  firstSyncAt           DateTime?    // Date of first successful data sync
-  lastSyncAt            DateTime?    // Date of most recent data sync
-  lastSyncRecordCount   Int?         // Records synced in last operation
-  totalSyncRecordCount  Int?         // Lifetime total records synced
-}
-```
-
-**Field Usage**:
-- `firstSyncAt`: Set only on first successful sync, never updated again
-- `lastSyncAt`: Updated after every successful sync with completion timestamp
-- `lastSyncRecordCount`: Shows records inserted + updated in most recent sync
-- `totalSyncRecordCount`: Cumulative total across all syncs (previous total + new records)
-
-### API Configuration Feeds
-
-The `feeds` field (JSON string) defines what data an API synchronizes:
-
-```typescript
-// PEMS PFA Read API
-feeds: JSON.stringify([{
-  entity: 'pfa',
-  views: ['Timeline Lab', 'Matrix', 'Grid Lab', 'PFA 1.0 Lab', 'PFA Master Data']
-}])
-
-// PEMS PFA Write API
-feeds: JSON.stringify([{
-  entity: 'pfa',
-  operation: 'write'
-}])
-
-// PEMS Assets API
-feeds: JSON.stringify([{
-  entity: 'asset_master',
-  views: ['Asset Master']
-}])
-
-// PEMS Classes API
-feeds: JSON.stringify([{
-  entity: 'classifications',
-  views: ['Classifications Master Data']
-}])
-```
-
-**UI Behavior**: The green "Sync Data" button only appears for APIs with non-null `feeds` configuration.
-
-### Sync Endpoints
-
-**Start Sync**:
-```
-POST /api/pems/sync
-Body: { organizationId: string, syncType: 'full' | 'incremental' }
-Response: { success: true, syncId: string, message: string, status: 'running' }
-```
-
-**Get Sync Progress**:
-```
-GET /api/pems/sync/:syncId
-Response: {
-  syncId: string,
-  status: 'running' | 'completed' | 'failed',
-  organizationId: string,
-  progress: { total, processed, inserted, updated, errors, percentage },
-  batch: { current, total },
-  timing: { startedAt, completedAt, duration },
-  error: string | null
-}
-```
-
-### Frontend Authentication
-
-**JWT Token Storage**:
-- Token stored in localStorage under key `'pfa_auth_token'` (not `'token'`)
-- User data stored under key `'pfa_user_data'`
-- All authenticated API calls use `apiClient` service which automatically includes the token
-
-**Important**: Always use `apiClient` methods for API calls instead of manual `fetch()` calls. The `apiClient` service handles:
-- Token retrieval from correct localStorage key
-- Authorization header injection
-- Error handling and token cleanup on 401 responses
-
-**Example**:
-```typescript
-// ✅ CORRECT - Uses apiClient service
-const data = await apiClient.syncPemsData(organizationId, 'full');
-
-// ❌ WRONG - Manual fetch with hardcoded token key
-const token = localStorage.getItem('token'); // Wrong key!
-const response = await fetch('/api/pems/sync', {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-```
-
-### UI Sync Tracking Columns
-
-**API Connectivity Table** displays four sync tracking columns:
-
-| Column | Description | Format | Display Condition |
-|--------|-------------|--------|-------------------|
-| **First Sync** | Date of first successful sync | `MMM DD, YYYY` | Only if `feeds` configured |
-| **Last Sync** | Date and time of most recent sync | `MMM DD, YYYY HH:MM` | Only if `feeds` configured |
-| **Last Pull** | Records synced in last operation | `1,234` (with thousands separator) | Only if `feeds` configured |
-| **Total Records** | Lifetime cumulative records | `12,345` (bold blue, thousands separator) | Only if `feeds` configured |
-
-**Empty State**: Shows "Never" or "—" for APIs that have never been synced.
-
-### Batch Processing
-
-**Performance Characteristics**:
-- **API Page Size**: 10,000 records per PEMS Grid Data API call
-- **Database Batch Size**: 1,000 records per Prisma transaction
-- **Memory Safety**: Processes large datasets without loading all into memory
-- **Progress Tracking**: Real-time updates via polling (2-second interval)
-
-**Organization Filtering**:
-- Authentication uses organization from API configuration (`'BECH'` for PEMS)
-- Data filtering uses actual organization code from database records
-- Supports multi-organization scenarios (e.g., RIO, HOLNG separate projects)
-
-### Database Architecture & Storage Strategy
-
-**Scale Requirements**:
-- **Current**: 1M+ PFA records across all organizations
-- **Growth**: Continuously growing dataset
-- **Performance**: Sub-100ms query response times
-- **Bi-directional**: Read from PEMS + Write updates back
-- **AI Integration**: Fast queries for AI assistant actions
-
-**Recommended: 3-Tier Hybrid Architecture**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  TIER 1: PostgreSQL Database (Source of Truth)             │
-│  - Store ALL PFA records with proper indexing              │
-│  - Track change state: pristine vs. modified vs. pending    │
-│  - Composite index on (organizationId, updatedAt)           │
-│  - Partial index on (organizationId WHERE modified=true)    │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│  TIER 2: Redis Cache (Hot Data Layer) - PLANNED            │
-│  - Cache active org data (TTL: 15 min)                      │
-│  - Cache AI query results (TTL: 5 min)                      │
-│  - Cache modified records (no TTL until sync)               │
-│  Key pattern: pfa:{orgId}:records, pfa:{orgId}:modified     │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│  TIER 3: React State (Active Session)                      │
-│  - Load only visible records (~800-1000)                    │
-│  - Sandbox pattern for uncommitted changes                  │
-│  - Virtual scrolling for 20K+ record views                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Change Tracking for Bi-directional Sync**:
-
-The `PfaRecord` model includes fields to track local modifications and sync state:
-
-```prisma
-model PfaRecord {
-  // ... existing fields ...
-
-  // Change Tracking (for bi-directional sync)
-  syncState         String    @default("pristine") // pristine, modified, pending_sync, sync_error
-  lastSyncedAt      DateTime? // When last pushed to PEMS
-  pemsVersion       String?   // PEMS lastModified timestamp (for conflict detection)
-  localVersion      Int       @default(1) // Increment on every local edit
-
-  // Modified Fields Tracking (for incremental sync)
-  modifiedFields    String?   // JSON array: ["forecastStart", "forecastEnd"]
-  modifiedBy        String?   // User ID who made local changes
-  modifiedAt        DateTime? // When local changes were made
-
-  // Sync Error Handling
-  syncErrorMessage  String?
-  syncRetryCount    Int       @default(0)
-
-  @@index([organizationId, syncState]) // Fast query for pending changes
-  @@index([organizationId, modifiedAt]) // Recent changes for incremental sync
-}
-```
-
-**Sync State Machine**:
-
-```
-PEMS (Read) → pristine → User Edit → modified → Sync to PEMS → pending_sync → Success/Error
-                ↑                                                                    ↓
-                └────────────────────── Success ─────────────────────────────────────┘
-                                                      ↓
-                                                  sync_error (retry up to 3x)
-```
-
-**Performance Optimizations**:
-
-1. **Database Indexing**:
-   ```sql
-   -- Composite indexes for fast filtering
-   CREATE INDEX idx_pfa_org_category_source
-     ON pfa_records(organizationId, category, source)
-     WHERE isDiscontinued = false;
-
-   -- Date range queries
-   CREATE INDEX idx_pfa_org_dates
-     ON pfa_records(organizationId, forecastStart, forecastEnd);
-
-   -- Modified records (for write sync)
-   CREATE INDEX idx_pfa_modified_pending
-     ON pfa_records(organizationId, syncState)
-     WHERE syncState IN ('modified', 'pending_sync');
-   ```
-
-2. **Pagination + Virtual Scrolling**: Frontend loads only visible records (~1000) with backend API pagination
-
-3. **Redis Caching** (Planned):
-   - Active organization data cached for 15 minutes
-   - AI query results cached for 5 minutes
-   - Modified records tracked in Redis set (no TTL until synced)
-
-**Query Performance Estimates** (with proper indexing):
-- Filter by org + category + source: **< 50ms**
-- Get modified records for sync: **< 20ms**
-- AI query with 3 filters: **< 100ms**
-- Full-text search: **< 200ms** (with GIN index)
-
-**Storage Estimates**:
-- PostgreSQL: ~500 bytes/record × 1M = **500 MB**
-- Redis cache: 10 active orgs × 50K records × 500 bytes = **250 MB**
-- Total: **< 1 GB** (manageable)
-
-**Bi-directional Sync Implementation**:
-
-**Read from PEMS** (Current - Working):
-- Fetch pages of 10,000 records from PEMS Grid Data API
-- Upsert to database in batches of 1,000
-- Skip overwriting locally modified fields (check `syncState`)
-- Track PEMS version (`pemsVersion` field) for conflict detection
-
-**Write to PEMS** (Planned - Not Yet Implemented):
-- Query records with `syncState IN ('modified', 'sync_error')`
-- Map local changes to PEMS Grid Data format
-- POST updates to PEMS Write API
-- On success: Update `syncState` to 'pristine', set `lastSyncedAt`
-- On error: Update `syncState` to 'sync_error', increment `syncRetryCount`
-- Max 3 retries before requiring manual intervention
-
-**Related Service Files**:
-- `backend/src/services/pems/PemsSyncService.ts` - Read sync (working)
-- `backend/src/services/pems/PemsWriteService.ts` - Write sync (planned)
-- `backend/src/services/cache/RedisCacheService.ts` - Caching layer (planned)
-
-### Utility Scripts
-
-**Check Feeds Status**:
-```bash
-cd backend
-npx tsx check-feeds.ts
-```
-Displays current `feeds` configuration and sync statistics for all API configurations.
-
-**Update Feeds Configuration**:
-```bash
-cd backend
-npx tsx update-feeds.ts
-```
-Manually populates `feeds` field for PEMS APIs. Use if seed script didn't update existing records.
-
-**Clear PFA Data**:
-```bash
-cd backend
-npx tsx clear-pfa-data.ts
-```
-Deletes all PFA records from database before full sync. Useful for testing sync from scratch.
-
-### Troubleshooting Sync Issues
-
-**Sync Button Not Visible**:
-- Check if `feeds` field is NULL in database (run `check-feeds.ts`)
-- If NULL, run `update-feeds.ts` to populate
-- Verify API configuration has `operationType: 'read'` or appropriate operation
-
-**Authentication Errors (401)**:
-- Ensure using `apiClient` service methods, not manual `fetch()`
-- Token is stored under `'pfa_auth_token'` key, not `'token'`
-- Check token expiration (default 7 days)
-- Try logout and login again
-
-**Sync Performance Issues**:
-- Reduce `PAGE_SIZE` in `pemsSyncService.ts` if API timeouts occur
-- Increase `BATCH_SIZE` if database writes are slow (max 1000 recommended)
-- Monitor backend logs for API latency and database transaction times
-
-**Data Not Appearing After Sync**:
-- Verify organization code filtering in `pemsSyncService.ts`
-- Check that records have correct `organizationId` in database
-- Ensure frontend filters are not hiding synced records
-
-### Related Files
-
-**Backend**:
-- `backend/src/services/pemsSyncService.ts` - Core sync logic with batch processing
-- `backend/src/controllers/pemsSyncController.ts` - REST endpoints and progress tracking
-- `backend/src/routes/pems.ts` - Route definitions for PEMS endpoints
-- `backend/prisma/schema.prisma` - Database schema with sync tracking fields
-- `backend/prisma/migrations/20251125040401_add_sync_tracking_fields/` - Migration for sync fields
-- `backend/check-feeds.ts` - Utility to verify feeds configuration
-- `backend/update-feeds.ts` - Utility to populate feeds field
-- `backend/clear-pfa-data.ts` - Utility to clear PFA records
-
-**Frontend**:
-- `components/admin/ApiConnectivity.tsx` - Sync UI with button, progress modal, and tracking columns
-- `services/apiClient.ts` - HTTP client with JWT authentication and sync methods
 
 ## Common Tasks
 
-> **🎯 Purpose**: Step-by-step instructions for the most common code changes. Follow these checklists to ensure you don't miss critical steps.
+> **📖 For detailed coding rules, see `docs/CODING_STANDARDS.md`**
 
-**Quick Reference**:
+### Add PfaRecord Field
+1. Update `PfaRecord` in `frontend/types.ts`
+2. Update `cloneAssets()` in `frontend/App.tsx` (if non-primitive)
+3. Add to `DEFAULT_EXPORT_CONFIG` (frontend/App.tsx)
+4. Add grid column (if needed)
 
-| Task | Primary Files | Steps | Critical Warning |
-|------|---------------|-------|------------------|
-| **Add PFA Field** | types.ts, App.tsx | 1. Update interface<br>2. Update cloneAssets()<br>3. Add to export config<br>4. Add grid column | Must update `cloneAssets()` for non-primitive fields |
-| **Add Filter** | types.ts, App.tsx, FilterPanel.tsx | 1. Update FilterState<br>2. Update createDefaultFilters()<br>3. Add UI control<br>4. Update filter logic | Filter logic is in App.tsx useEffect (line ~297-346) |
-| **Add Bulk Op** | CommandDeck.tsx | 1. Add button<br>2. Call onUpdateAssets()<br>3. Enforce business rules | Can't move actual start dates backward |
-| **Add Admin Menu** | App.tsx (NOT AdminDashboard.tsx) | 1. Import icon<br>2. Add MenuItem<br>3. Import component<br>4. Add render logic | Menu is in App.tsx, not AdminDashboard.tsx |
-| **Debug Drag-Drop** | Timeline.tsx | 1. Check dragOverrides Map<br>2. Verify onUpdateAssets call<br>3. Check updatePfaRecords() | Use dragOverrides Map for preview, not direct mutation |
-| **Fix Cost Calc** | utils.ts | 1. Check source field<br>2. Verify calculateCost()<br>3. Check aggregateCosts() | Rental: (days/30.44) × monthlyRate<br>Purchase: purchasePrice only |
+### Add Filter
+1. Update `FilterState` in `frontend/types.ts`
+2. Update `createDefaultFilters()` in `frontend/App.tsx`
+3. Add UI control in `frontend/components/FilterPanel.tsx`
+4. Update filter logic in `frontend/App.tsx` useEffect (~line 297-346)
+
+### Add Bulk Operation
+1. Add button to `frontend/components/CommandDeck.tsx`
+2. Call `onUpdateAssets()` with transformation
+3. Enforce business rules (e.g., can't move actual start backward)
+
+### Add Admin Menu Item
+**Location: frontend/App.tsx**
+1. Import icon (line 34)
+2. Add MenuItem (line ~751-758)
+3. Import component (line ~18-30)
+4. Add render logic (line ~950-960)
 
 ---
 
-### Add a New PfaRecord Field
+## PEMS Sync
 
-1. Update `PfaRecord` interface in `types.ts`
-2. Regenerate `mockData.ts`: `node generateMockData.js` (or manually add to `STATIC_PFA_RECORDS`)
-3. Update `cloneAssets()` in `App.tsx` if field is non-primitive
-4. Add to import/export mappings in `DEFAULT_EXPORT_CONFIG` (App.tsx)
-5. Add column to grid view if needed (update `GridColumn[]`)
+### Quick Reference
+**Read Sync:** ✅ Working (PEMS → PostgreSQL)
+**Write Sync:** 📋 Planned (PostgreSQL → PEMS)
+**Scale:** 1M+ records, 10K API calls, 1K DB batches
 
-### Add a New Filter
+### Auth Pattern
+**Critical:** Use `apiClient` service (handles JWT from `'pfa_auth_token'`)
+**Never:** Manual `fetch()` with wrong localStorage key
 
-1. Add field to `FilterState` interface in `types.ts`
-2. Update `createDefaultFilters()` in `App.tsx`
-3. Add UI control in `FilterPanel.tsx`
-4. Update filter logic in `App.tsx` useEffect (around line 297-346)
+### Troubleshooting
+- **401 errors:** Using manual `fetch()` or wrong token key
+- **Sync button hidden:** `feeds` field NULL (run `update-feeds.ts`)
+- **Performance:** Adjust `PAGE_SIZE` or `BATCH_SIZE`
 
-### Add a New Bulk Operation
+### Database Architecture (3-Tier)
+```
+PostgreSQL (source of truth)
+    ↓
+Redis Cache (hot data, planned)
+    ↓
+React State (~800-1000 records)
+```
 
-1. Add button/form to `CommandDeck.tsx`
-2. Call `onUpdateAssets()` with transformation function
-3. Ensure business rules are enforced (e.g., don't move actual start dates backward)
-4. History is automatically saved via `updatePfaRecords()` wrapper
+**Change Tracking:** `syncState`: pristine → modified → pending_sync → sync_error
 
-### Add a New Admin Menu Item
+---
 
-**IMPORTANT**: Admin menu items are in **App.tsx**, NOT AdminDashboard.tsx.
+## ADR Workflow
 
-1. **Add icon import** to `App.tsx` line 34 (lucide-react imports)
-2. **Add menu item** in the Administration section (around line 751-758):
-   ```tsx
-   <MenuItem label="Your Feature" icon={YourIcon} active={appMode === 'your-feature'} onClick={() => setAppMode('your-feature')} />
-   ```
-3. **Import component** at top of `App.tsx` (around line 18-30):
-   ```tsx
-   import { YourComponent } from './components/admin/YourComponent';
-   ```
-4. **Add render logic** in main content area (around line 950-960):
-   ```tsx
-   {appMode === 'your-feature' && (
-       <YourComponent />
-   )}
-   ```
+> **📖 For complete ADR structure and philosophy, see `docs/adrs/README.md`**
 
-Example: See Data Source Mappings implementation (App.tsx:753, 954).
+### Lifecycle Commands
 
-### Debug Drag-and-Drop Issues
+```bash
+/plan-adr 006 "Title" "Problem"        # Create 7-doc blueprint
+/update-adr 006 "Change" "Details"     # Update existing ADR
+/execute-adr 006                       # Generate workflow
+/invoke-agent <agent-name> <task-id>   # Execute task
+```
 
-1. Check `dragOverrides` Map in `Timeline.tsx` (should contain temp updates during drag)
-2. Verify `onUpdateAsset()` or `onUpdateAssets()` is called on mouse up
-3. Check `updatePfaRecords()` is invoked (triggers re-render via `setDataVersion`)
-4. Inspect `allPfaRef.current` in browser DevTools (should see updated dates after drop)
+### Available Agents
 
-### Fix Cost Calculation Issues
+**Orchestration & Planning**:
+- `orchestrator`: Multi-agent coordination, task dependencies, parallel execution
+- `adr-executor`: Execute ADR workflows, process prompt bundles sequentially
+- `product-requirements-analyst`: User stories, acceptance criteria, edge cases
 
-1. Check `source` field ('Rental' or 'Purchase')
-2. Verify `utils.ts: calculateCost()` logic
-3. For Rental: Ensure `monthlyRate` is set and `days / 30.44` is correct
-4. For Purchase: Ensure `purchasePrice` is set (duration is ignored)
-5. Check KPI Board aggregation: `aggregateCosts()` in `utils.ts`
+**Backend & Database**:
+- `backend-architecture-optimizer`: Node.js, Express, APIs, async patterns, queues
+- `postgres-jsonb-architect`: Database schema, Prisma migrations, JSONB optimization
+- `database-reliability-qa`: Performance testing, concurrency validation, query optimization
+
+**Frontend & UX**:
+- `react-ai-ux-specialist`: React components, AI streaming, state management
+- `ux-technologist`: UX evaluation, perceived performance, interaction design
+- `design-review-agent`: Comprehensive UI/UX review, accessibility, visual polish
+
+**AI & Prompt Engineering**:
+- `ai-systems-architect`: LLM integration, RAG pipelines, AI orchestration
+- `prompt-engineer`: Prompt optimization, model evaluation, AI feature design
+- `ai-quality-engineer`: AI output quality, golden datasets, hallucination detection
+
+**Testing & Quality**:
+- `sdet-test-automation`: Test suites, E2E, integration tests, coverage
+- `ci-cd-governor`: Code quality enforcement, automated checks, pre-commit hooks
+
+**Security & DevOps**:
+- `ai-security-red-teamer`: Prompt injection, jailbreak testing, security audit
+- `devsecops-engineer`: CI/CD pipelines, security hardening, infrastructure, monitoring
+
+**Documentation**:
+- `documentation-synthesizer`: Technical docs, ADR compilation, markdown standards
+
+**Philosophy:** "Blueprint Container" approach - Product, UX, AI, and Engineering concerns isolated and defined before implementation.
+
+---
+
+## Naming Conventions
+
+> **📖 For complete naming conventions, see `docs/CODING_STANDARDS.md` Section 7**
+> **Temporal Files:** `[date]-[purpose]-[status].[ext]` (e.g., `2025-11-25-pems-analysis-wip.md`)
+  **Utility Scripts:** `[action]-[subject]-[detail].ts` (e.g., `check-feeds.ts`, `update-feeds.ts`)
+  **Test Scripts:** `[subject].[type].test.ts` (e.g., `calculate-cost.unit.test.ts`)
+
+### Log Statuses
+* **PENDING / IN PROGRESS**: Active development.
+* **ON TESTING**: Code complete, tests running.
+* **LOCKED 🔒**: Production deployed. **NEVER modify** without formal change control.
+
+**Commits:** `[TYPE] Brief summary - DEV-XXX`
+Types: `FEAT`, `FIX`, `REFACTOR`, `DOCS`, `TEST`, `CHORE`, `PERF`, `SECURITY`, `RELEASE`
+
+**Branches:** `<type>/<ticket>-<description>`
+Examples: `feature/DEV-123-pems-sync`, `bugfix/DEV-124-crash`
+
+**Scripts:** `[action]-[subject]-[detail].ts`
+Examples: `check-feeds.ts`, `update-feeds.ts`, `verify-orgs.ts`
+
+**Tests:** `[subject].[type].test.ts`
+Examples: `calculateCost.unit.test.ts`, `pems-api.integration.test.ts`
+
+**Temp Files:** `[date]-[purpose]-[status].[ext]`
+Location: `temp/agent-work/`, `temp/compile/`, `temp/output/`, `temp/test/`
+
+---
+
+## API Endpoints
+
+> **📖 For complete API reference, see `docs/backend/API_REFERENCE.md`**
+
+**Auth:** `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/verify`
+**AI:** `POST /api/ai/chat`, `GET /api/ai/usage`
+**PEMS:** `GET /api/pems/configs`, `POST /api/pems/test`, `POST /api/pems/sync`
+**API Config:** `GET /api/configs`, `POST /api/configs`, `PUT /api/configs/:id`, `DELETE /api/configs/:id`
+
+---
 
 ## Known Issues
 
-### Critical (Security)
+> **📖 For complete issue list, see `docs/ARCHITECTURE.md` Section 9**
 
-1. **API Keys in Environment Variables**: AI provider API keys stored in backend .env
-   - Keys are server-side only (good), but need proper secrets management
-   - **Fix**: Use AWS Secrets Manager, Azure Key Vault, or similar for production
+**Security:** API keys in .env (need AWS Secrets Manager / Azure Key Vault)
+**Architecture:** Ref-based state, 800 record limit, history management (400MB RAM)
+**Missing:** Error boundaries, test coverage (0%), Papa Parse for CSV
 
-### High Priority (Architecture)
-
-3. **Ref-Based State**: Violates React best practices
-   - `allPfaRef` mutations don't trigger re-renders automatically
-   - Hard to debug, race conditions possible
-   - **Fix**: Migrate to Zustand or Redux Toolkit
-
-4. **800 Record Limit**: Hardcoded cap in filtering (line 343-344 in App.tsx)
-   - 20,280 records available but only 800 shown
-   - **Fix**: Implement proper pagination or remove limit
-
-5. **Memory Leaks**: History management stores 20 full snapshots
-   - 20 snapshots × 20K records × 1KB = ~400MB RAM
-   - **Fix**: Use diff-based history (store only changes)
-
-### Medium Priority
-
-6. **Custom CSV Parser**: Regex-based, fragile for edge cases
-   - Doesn't handle newlines in quoted fields correctly
-   - **Fix**: Use Papa Parse library
-
-7. **No Error Boundaries**: One component error crashes entire app
-   - **Fix**: Wrap major sections in `<ErrorBoundary>` components
-
-8. **No Tests**: Zero test coverage
-   - **Fix**: Add Vitest + Testing Library for critical functions
+---
 
 ## Production Checklist
 
-### Critical (Before ANY Production Use)
+> **📖 For complete checklist, see `docs/ARCHITECTURE.md` Section 10**
 
-- [x] Implement JWT authentication with backend API ✅
-- [x] Move AI API keys to backend proxy ✅
-- [x] Use generic "Invalid credentials" error message (prevents username enumeration) ✅
-- [ ] Migrate to proper secrets management (AWS Secrets Manager / Azure Key Vault)
-- [ ] Add error boundaries for fault tolerance
-- [ ] Security audit (OWASP Top 10)
-- [ ] Migrate database from SQLite to PostgreSQL
-
-### High Priority
-
-- [ ] Replace ref-based state with proper state management (Zustand/Redux)
-- [ ] Remove 800 record limit or implement pagination
-- [ ] Optimize history management (diff-based)
-- [ ] Replace custom CSV parser with Papa Parse
-- [ ] Add comprehensive error handling
-
-### Medium Priority
-
-- [ ] Add unit/integration tests (target 70%+ coverage)
-- [x] Implement backend API with Prisma ORM ✅
-- [ ] Add loading states and skeleton screens
-- [ ] Audit accessibility (WCAG compliance)
-- [ ] Add rate limiting per user (currently global only)
-
-### Business Integration
-
-- [ ] Connect to ESS API for PLAN imports
-- [ ] Connect to Procurement system for ACTUAL updates
-- [ ] Set up scheduled imports (daily/weekly)
-- [ ] Configure field mappings for client's external systems
-- [ ] Test end-to-end flow: ESS → PFA Vanguard → Procurement → Finance
-
-## External Resources
-
-- **AI Studio**: https://ai.studio/apps/drive/1qDNhrLQ0m0jiM3gWkyzWZmIqkCzdq3Pc
-- **Gemini API**: https://ai.google.dev/
-- **Vite Docs**: https://vitejs.dev/
-- **React 19**: https://react.dev/
-
-
-```
-
-**ErrorBoundary Features**:
-
-- Automatic fallback UI with retry/refresh options
-- Development mode error details
-- Custom error handling callbacks
-- Integration with NextUI design system
-
-**ErrorFallback Variants**:
-
-- `default` - Full error display with actions
-- `minimal` - Compact inline error message  
-- `minimal` - Compact inline error message
-- `detailed` - Includes error stack trace in development
-
-## Visual Development & Testing
-
-### Design System
-
-The project follows S-Tier SaaS design standards inspired by Stripe, Airbnb, and Linear. All UI development must adhere to:
-
-- **Design Principles**: `/context/design-principles.md` - Comprehensive checklist for world-class UI
-- **Component Library**: NextUI with custom Tailwind configuration
-
-### Quick Visual Check
-
-**IMMEDIATELY after implementing any front-end change:**
-
-1. **Identify what changed** - Review the modified components/pages
-2. **Navigate to affected pages** - Use `mcp__playwright__browser_navigate` to visit each changed view
-3. **Verify design compliance** - Compare against `/context/design-principles.md`
-4. **Validate feature implementation** - Ensure the change fulfills the user's specific request
-5. **Check acceptance criteria** - Review any provided context files or requirements
-6. **Capture evidence** - Take full page screenshot at desktop viewport (1440px) of each changed view
-7. **Check for errors** - Run `mcp__playwright__browser_console_messages` ⚠️
-
-This verification ensures changes meet design standards and user requirements.
-
-### Comprehensive Design Review
-
-For significant UI changes or before merging PRs, use the design review agent:
-
-```bash
-# Option 1: Use the slash command
-/design-review
-
-# Option 2: Invoke the agent directly
-@agent-design-review
-```
-
-The design review agent will:
-
-- Test all interactive states and user flows
-- Verify responsiveness (desktop/tablet/mobile)
-- Check accessibility (WCAG 2.1 AA compliance)
-- Validate visual polish and consistency
-- Test edge cases and error states
-- Provide categorized feedback (Blockers/High/Medium/Nitpicks)
-
-### Playwright MCP Integration
-
-#### Essential Commands for UI Testing
-
-```javascript
-// Navigation & Screenshots
-mcp__playwright__browser_navigate(url); // Navigate to page
-mcp__playwright__browser_take_screenshot(); // Capture visual evidence
-mcp__playwright__browser_resize(
-  width,
-  height
-); // Test responsiveness
-
-// Interaction Testing
-mcp__playwright__browser_click(element); // Test clicks
-mcp__playwright__browser_type(
-  element,
-  text
-); // Test input
-mcp__playwright__browser_hover(element); // Test hover states
-
-// Validation
-mcp__playwright__browser_console_messages(); // Check for errors
-mcp__playwright__browser_snapshot(); // Accessibility check
-mcp__playwright__browser_wait_for(
-  text / element
-); // Ensure loading
-```
-
-### Design Compliance Checklist
-
-When implementing UI features, verify:
-
-- [ ] **Visual Hierarchy**: Clear focus flow, appropriate spacing
-- [ ] **Consistency**: Uses design tokens, follows patterns
-- [ ] **Responsiveness**: Works on mobile (375px), tablet (768px), desktop (1440px)
-- [ ] **Accessibility**: Keyboard navigable, proper contrast, semantic HTML
-- [ ] **Performance**: Fast load times, smooth animations (150-300ms)
-- [ ] **Error Handling**: Clear error states, helpful messages
-- [ ] **Polish**: Micro-interactions, loading states, empty states
-
-## When to Use Automated Visual Testing
-
-### Use Quick Visual Check for:
-
-- Every front-end change, no matter how small
-- After implementing new components or features
-- When modifying existing UI elements
-- After fixing visual bugs
-- Before committing UI changes
-
-### Use Comprehensive Design Review for:
-
-- Major feature implementations
-- Before creating pull requests with UI changes
-- When refactoring component architecture
-- After significant design system updates
-- When accessibility compliance is critical
-
-### Skip Visual Testing for:
-
-- Backend-only changes (API, database)
-- Configuration file updates
-- Documentation changes
-- Test file modifications
-- Non-visual utility functions
+**Critical:** Secrets management, error boundaries, security audit, PostgreSQL migration
+**High:** Replace ref-based state, remove 800 limit, diff-based history, Papa Parse
 
 ---
 
-## Git & GitHub Best Practices
+## External References
 
-> **📖 Full details:** See [DOCUMENTATION_STANDARDS.md](./docs/DOCUMENTATION_STANDARDS.md) Section 11
+**Docs (Read First):**
+- `docs/DOCUMENTATION_STANDARDS.md` - Git workflow, commit conventions
+- `docs/CODING_STANDARDS.md` - TypeScript strict mode, 20-line rule, security
+- `docs/ARCHITECTURE.md` - Complete system architecture (1,500+ lines)
 
-### When to Commit
+**ADRs:**
+- `docs/adrs/README.md` - ADR index and 7-doc structure
+- `docs/adrs/ADR-005-multi-tenant-access-control/` - Complete example
 
-**✅ COMMIT NOW:**
-1. **Before major refactoring** - Create safety checkpoint
-2. **After functionality works** - Test locally first
-3. **Documentation updates** - Always commit doc changes
+**Development:**
+- `docs/DEVELOPMENT_LOG.md` - Track all implementation work here
+- `docs/TESTING_LOG.md` - Test execution history
 
-**❌ NEVER COMMIT:**
-- Broken code (unless on `wip/` branch)
-- console.log statements (unless intentional logging)
-- Secrets or API keys
-- node_modules/ or build artifacts
-
-### Commit Message Format
-
-```
-[TYPE] Brief summary (50 chars max) - DEV-XXX
-
-Detailed explanation of what changed and why.
-
-Changes:
-- Specific change 1
-- Specific change 2
-
-Related:
-- Development: [DEV-XXX] status → ON TESTING
-- Testing: [TEST-XXX]
-
-Updated:
-- README.md
-- docs/DEVELOPMENT_LOG.md
-- docs/backend/API_REFERENCE.md
-```
-
-**Types:** `[FEAT]`, `[FIX]`, `[REFACTOR]`, `[DOCS]`, `[TEST]`, `[CHORE]`, `[PERF]`, `[SECURITY]`, `[RELEASE]`
-
-### README.md Maintenance
-
-**⚠️ CRITICAL:** README.md must ALWAYS reflect current functionality.
-
-**Update README.md when:**
-- ✅ Adding new features → Update "Current Features"
-- ✅ Version bumps → Update version badge
-- ✅ Production deploys → Update "Last Deploy"
-- ✅ Tech stack changes → Update "Tech Stack"
-
-**Update frequency:** Every commit that adds/changes user-facing functionality
-
-### Commit Workflow
-
-```
-1. Make changes to code
-2. Test functionality locally
-   ├─► Works? ────► Continue
-   └─► Broken? ──► Fix before committing
-
-3. Update documentation
-   ├─► README.md (if functionality changed)
-   ├─► DEVELOPMENT_LOG.md (status update)
-   └─► API.md or COMPONENTS.md (if applicable)
-
-4. Stage changes
-   git add <files>
-
-5. Commit with proper message
-   git commit -m "[TYPE] Description - DEV-XXX"
-
-6. Push to remote
-   git push origin <branch>
-```
-
-### Branch Naming
-
-**Format:** `<type>/<ticket>-<description>`
-
-**Examples:**
-- `feature/DEV-123-pems-sync-ui`
-- `bugfix/DEV-124-timeline-crash`
-- `docs/DEV-126-update-docs`
+**Resources:**
+- AI Studio: https://ai.studio/apps/drive/1qDNhrLQ0m0jiM3gWkyzWZmIqkCzdq3Pc
+- Gemini API: https://ai.google.dev/
+- Vite: https://vitejs.dev/
+- React 19: https://react.dev/
 
 ---
 
-## Temporal Files, Scripts & Test Organization
+## Quick ADR Summary
 
-> **📖 Full details:** See [DOCUMENTATION_STANDARDS.md](./docs/DOCUMENTATION_STANDARDS.md) Section 17
+**Implemented**:
+- ✅ ADR-005: Multi-Tenant Access Control (14 permissions, audit ledger, PATs, impersonation)
 
-### Temporary File Locations
+**In Design**:
+- 🏗️ ADR-006: API Server & Endpoint Architecture (two-tier, per-endpoint testing)
+- 🏗️ ADR-007: API Connectivity & Intelligence Layer (Bronze-Silver-Gold pipeline)
 
-**AI agents and development sessions** must use the following folder structure for temporary files:
-
-| Type | Location | Pattern | Lifecycle |
-|------|----------|---------|-----------|
-| **Agent Working Files** | `temp/agent-work/` | `*.tmp.md`, `*.wip.md` | Delete after task |
-| **Compilation Results** | `temp/compile/` | `*-summary.md` | Archive after review |
-| **Script Output** | `temp/output/` | `*-results.txt` | Delete after 7 days |
-| **Test Artifacts** | `temp/test/` | `*-test-results.json` | Delete after test run |
-
-**Naming Convention:** `[date]-[purpose]-[status].[ext]`
-
-**Examples:**
-```
-temp/agent-work/2025-11-25-pems-sync-analysis-wip.md
-temp/compile/2025-11-25-component-refactor-complete.md
-temp/output/2025-11-25-sync-results.txt
-temp/test/2025-11-25-integration-test-results.json
-```
-
-**Status Suffixes:**
-- `.wip.md` - Work in progress
-- `.tmp.md` - Temporary, can be deleted anytime
-- `.draft.md` - Draft document for review
-- `.final.md` - Final version ready for archiving
-
-### Script Organization
-
-**Backend Scripts:** `backend/scripts/`
-- Database utilities: `backend/scripts/db/`
-- Sync utilities: `backend/scripts/sync/`
-- Maintenance tasks: `backend/scripts/maintenance/`
-
-**Frontend Scripts:** `frontend/scripts/` (when needed)
-
-**Script Naming Convention:** `[action]-[subject]-[detail].ts`
-
-**Examples:**
-```
-backend/scripts/db/check-feeds.ts
-backend/scripts/db/update-feeds.ts
-backend/scripts/db/clear-pfa-data.ts
-backend/scripts/db/verify-orgs.ts
-backend/scripts/sync/test-pems-connection.ts
-backend/scripts/sync/manual-sync-trigger.ts
-```
-
-**Script Categories:**
-- **Diagnostic** (`check-*.ts`) - Inspect current system state
-- **Update** (`update-*.ts`) - Modify data or configuration
-- **Cleanup** (`clear-*.ts`, `cleanup-*.ts`) - Delete or clean data
-- **Verification** (`verify-*.ts`) - Validate data integrity
-- **Testing** (`test-*.ts`) - Manual test utilities
-
-### Script Documentation Requirements
-
-**Every script folder must have a README.md** that explains:
-1. Available scripts
-2. Purpose of each script
-3. Usage examples
-4. When to use each script
-5. Dependencies and prerequisites
-
-See `backend/scripts/README.md` for template.
-
-### Test Organization
-
-**Test Structure:**
-```
-tests/
-├── README.md                    # Test suite index
-├── setup/                       # Test setup files
-├── unit/                        # Unit tests
-│   ├── backend/
-│   │   ├── services/
-│   │   └── utils/
-│   └── frontend/
-│       ├── components/
-│       └── utils/
-├── integration/                 # Integration tests
-├── e2e/                         # End-to-end tests
-└── __mocks__/                   # Mock implementations
-```
-
-**Test Naming Convention:** `[subject].[type].test.ts`
-
-**Examples:**
-```
-tests/unit/backend/utils/calculateCost.unit.test.ts
-tests/unit/frontend/utils/aggregateCosts.unit.test.ts
-tests/integration/backend/pems-api.integration.test.ts
-tests/e2e/sync-workflow.e2e.test.ts
-```
-
-### Quick Reference for AI Agents
-
-**When creating temporary files:**
-1. ✅ Use `temp/agent-work/` folder
-2. ✅ Use date-purpose-status naming pattern
-3. ✅ Clean up `.tmp.md` and `.wip.md` files after task completion
-4. ✅ Archive `.final.md` files to `docs/archive/YYYY-MM/` if needed
-
-**When creating utility scripts:**
-1. ✅ Place in appropriate `backend/scripts/` subfolder
-2. ✅ Use action-subject-detail naming pattern
-3. ✅ Add JSDoc header with @file, @description, @usage
-4. ✅ Update folder README.md with script documentation
-5. ✅ Include error handling and proper logging
-
-**When creating tests:**
-1. ✅ Place in appropriate `tests/` subfolder
-2. ✅ Use subject.type.test.ts naming pattern
-3. ✅ Update tests/README.md with test documentation
+**See**: `docs/adrs/README.md` for complete ADR catalog and lifecycle commands
 
 ---
 
-## Environment Setup
-
-Requires these environment variables:
-@@ -164,9 +277,8 @@ Requires these environment variables:
-- Cloudinary configuration
-- Email service credentials (Resend)
-
-[byterover-mcp]
-
-# important
-## Additional Context
-
-always use byterover-retrive-knowledge tool to get the related context before any tasks
-always use byterover-store-knowledge to store all the critical informations after sucessful tasks
-- Design review agent configuration: `/.claude/agents/design-review-agent.md`
-- Design principles checklist: `/context/design-principles.md`
-- Custom slash commands: `/context/design-review-slash-command.md`
+**Version:** 3.2 (Frontend/Backend Separation)
+**Updated:** 2025-11-29

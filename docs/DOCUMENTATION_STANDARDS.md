@@ -56,9 +56,21 @@ PFA2.2/
 │   │
 │   ├── adrs/                          # 📐 Architecture Decision Records
 │   │   ├── README.md                  # ADR index and process
-│   │   ├── ADR-004-database-architecture-hybrid.md
-│   │   ├── ADR-005-CACHED-MIRROR-DELTA-ARCHITECTURE.md
-│   │   └── template.md                # ADR template (future)
+│   │   ├── ADR-004-database-architecture-hybrid/
+│   │   │   ├── ADR-004-DECISION.md            # Decision record (what & why)
+│   │   │   ├── ADR-004-IMPLEMENTATION_PLAN.md # Implementation steps
+│   │   │   ├── ADR-004-AGENT_WORKFLOW.md      # Agent orchestration
+│   │   │   └── ADR-004-TECHNICAL_DOCS.md      # What was implemented
+│   │   ├── ADR-005-multi-tenant-access-control/
+│   │   │   ├── ADR-005-DECISION.md            # Decision record (what & why)
+│   │   │   ├── ADR-005-IMPLEMENTATION_PLAN.md # Implementation steps
+│   │   │   ├── ADR-005-AGENT_WORKFLOW.md      # Agent orchestration
+│   │   │   └── ADR-005-TECHNICAL_DOCS.md      # What was implemented
+│   │   └── template/                  # ADR template folder
+│   │       ├── ADR-NNN-DECISION.md            # Template for decision
+│   │       ├── ADR-NNN-IMPLEMENTATION_PLAN.md # Template for implementation
+│   │       ├── ADR-NNN-AGENT_WORKFLOW.md      # Template for workflow
+│   │       └── ADR-NNN-TECHNICAL_DOCS.md      # Template for tech docs
 │   │
 │   ├── implementation/                # 🛠️ Implementation plans
 │   │   ├── README.md                  # Implementation plan index
@@ -264,15 +276,81 @@ Tracks significant changes to ARCHITECTURE.md.
 
 Documents significant architectural decisions with context and rationale.
 
-**Naming:** `ADR-NNN-descriptive-title.md` (e.g., `ADR-001-sandbox-pattern.md`)
+**⚠️ IMPORTANT: Each ADR must have its own folder with 7 required documents (Blueprint Container).**
 
-**Required Sections:**
-- **Status:** Proposed/Accepted/Superseded/Deprecated
-- **Context:** Problem statement, constraints, requirements
-- **Decision:** What was decided and why
-- **Consequences:** Positive and negative impacts
-- **Alternatives Considered:** Other options evaluated with pros/cons
-- **Implementation Notes:** Key technical details (optional)
+**Folder Structure:** `docs/adrs/ADR-NNN-descriptive-title/`
+
+This structure moves beyond simple text files; it creates a structured **"Blueprint Container"** where every aspect of a feature—from business intent to AI readiness—is isolated and defined before a single line of code is written.
+
+**Required Documents in Each ADR Folder:**
+
+⚠️ **IMPORTANT**: All files must be prefixed with `ADR-NNN-` (e.g., `ADR-005-DECISION.md`)
+
+1. **`ADR-NNN-DECISION.md`** - The "Why" & Business Logic (The Foundation)
+   - **Purpose:** Single source of truth for business requirements and architectural choice
+   - **Status:** Proposed/Accepted/Superseded/Deprecated/Implemented
+   - **Context & Drivers:** What problem are we solving? Why now?
+   - **User Stories:** Specific "As a [role], I want [action]" statements
+   - **Acceptance Criteria:** Binary Pass/Fail conditions for the feature
+   - **Decision:** The specific architectural approach chosen
+   - **Consequences:** Positive, negative, and neutral impacts
+   - **Alternatives Considered:** Other options and why they were rejected
+
+2. **`ADR-NNN-AI_OPPORTUNITIES.md`** - The "Future-Proofing" & Data Hooks (The AI Readiness Layer)
+   - **Purpose:** Identify "sockets" required today so AI features can be plugged in tomorrow without a rewrite
+   - **Future Use Cases:** Brainstorming list of how an Agent or LLM might utilize this feature later
+   - **Data Prerequisites:** Specific fields or logging structures required *now* to train/guide AI later
+   - **API Requirements:** Granularity needed for an Agent to control this feature
+   - **AI Integration Points:** Where can AI augment or automate this feature
+
+3. **`ADR-NNN-UX_SPEC.md`** - The "Feel" & Interaction Model (The Interaction Model)
+   - **Purpose:** Define "Perceived Performance" and user behavior
+   - **Optimistic UI Rules:** How UI should update *before* server responds
+   - **Loading States:** Specific skeleton screens or spinners for every async state
+   - **Error Handling:** How to fail gracefully
+   - **Latency Budgets:** Maximum allowed time for interactions
+   - **Accessibility Requirements:** WCAG compliance, keyboard navigation, screen readers
+
+4. **`ADR-NNN-TEST_PLAN.md`** - The "Guardrails" & Security (The Guardrails)
+   - **Purpose:** Define exactly how feature will be verified for correctness, security, and performance
+   - **Adversarial Scenarios:** Specific "attacks" to test
+   - **Load Testing:** Performance thresholds
+   - **Critical Path Tests:** Exact user flows that *must* pass for feature to launch
+   - **Data Integrity:** How to verify data isn't corrupted during valid operations
+   - **Security Testing:** Authentication, authorization, input validation, rate limiting
+
+5. **`ADR-NNN-IMPLEMENTATION_PLAN.md`** - The "How" (Technical Blueprint)
+   - **Purpose:** Detailed technical instructions consolidating Backend, Frontend, and Database designs
+   - **Database Schema:** DDL statements, indexes, JSONB structures
+   - **API Specification:** Endpoints, request/response payloads, error codes
+   - **Component Hierarchy:** React component tree, state management choice
+   - **Dependencies:** Libraries or external services required
+   - **Phases:** Breakdown of implementation steps with deliverables
+   - **Timeline:** Estimated duration per phase
+   - **Success Criteria:** How to verify completion
+
+6. **`ADR-NNN-AGENT_WORKFLOW.md`** - The "Schedule" (Execution Logistics)
+   - **Purpose:** Transform implementation plan into sequence of tasks for agent swarm
+   - **Agent Assignments:** Which agents do what (with best agent selection)
+   - **Dependency Graph:** What must happen first
+   - **Parallel Tracks:** Tasks that can be executed simultaneously
+   - **Checkpoints:** When QA or Security reviews must occur
+   - **Context Files:** Which specific files act as input for each task
+   - **Timeline Optimization:** Critical path analysis for fastest completion
+   - **Task Commands:** Ready-to-use Task() invocations with specific prompts
+
+7. **`ADR-NNN-TECHNICAL_DOCS.md`** - The "As-Built" (Living Record)
+   - **Purpose:** Document the "As-Built" reality after implementation
+   - **What Was Implemented:** Actual files created/modified
+   - **System Context:** High-level diagram of how feature fits into app
+   - **Key Patterns:** Explanations of non-standard code
+   - **Key Changes:** Database schema, API endpoints, components
+   - **Deviations from Plan:** What changed during implementation
+   - **Troubleshooting:** Common issues and how to debug them
+   - **Maintenance:** Routine tasks required
+   - **Lessons Learned:** What worked, what didn't
+   - **Future Improvements:** Known issues or enhancements
+   - **Created After**: Implementation is complete
 
 **Create When:** Making significant architectural decisions that affect:
 - State management patterns (e.g., sandbox pattern, ref-based state)
@@ -281,11 +359,71 @@ Documents significant architectural decisions with context and rationale.
 - Performance strategies (e.g., virtual scrolling, batch processing)
 - Security decisions (e.g., JWT authentication, API key storage)
 
-**Example ADRs for PFA Vanguard:**
-- `ADR-001-sandbox-pattern.md` - Dual-ref architecture for undo/redo
-- `ADR-002-multi-org-isolation.md` - Organization-based data isolation
-- `ADR-003-pems-integration.md` - PEMS Grid Data API sync approach
-- `ADR-004-ai-provider-abstraction.md` - Multi-provider AI strategy
+**Example ADR Folder for PFA Vanguard:**
+```
+docs/adrs/ADR-005-multi-tenant-access-control/
+├── README.md                          # Folder overview & navigation
+├── ADR-005-DECISION.md                # The "Why" - RBAC decision
+├── ADR-005-AI_OPPORTUNITIES.md        # Future AI integration points
+├── ADR-005-UX_SPEC.md                 # Interaction model & perceived performance
+├── ADR-005-TEST_PLAN.md               # Security & testing guardrails
+├── ADR-005-IMPLEMENTATION_PLAN.md     # The "How" - 6-phase technical blueprint
+├── ADR-005-AGENT_WORKFLOW.md          # The "Schedule" - Optimized execution
+└── ADR-005-TECHNICAL_DOCS.md          # The "As-Built" - (Created after implementation)
+```
+
+**ADR Creation Workflow (7-Document Blueprint):**
+
+1. **Requirements & Planning Phase** (Agent: `product-requirements-analyst`):
+   - Create ADR folder: `docs/adrs/ADR-NNN-descriptive-title/`
+   - Write `ADR-NNN-DECISION.md` with business requirements and architectural choice
+   - Define user stories, acceptance criteria, and decision drivers
+   - Status: **Proposed**
+
+2. **AI Readiness Phase** (Agent: `ai-systems-architect` or `prompt-engineer`):
+   - Write `ADR-NNN-AI_OPPORTUNITIES.md` identifying future AI integration points
+   - Define data hooks, API granularity, and AI use cases
+   - Ensure feature is "AI-ready" without rewrite
+
+3. **UX Design Phase** (Agent: `react-ai-ux-specialist` or `ux-technologist`):
+   - Write `ADR-NNN-UX_SPEC.md` defining interaction model
+   - Specify optimistic UI, loading states, error handling, latency budgets
+   - Define accessibility requirements
+
+4. **Testing & Security Phase** (Agent: `ai-security-red-teamer` + `sdet-test-automation`):
+   - Write `ADR-NNN-TEST_PLAN.md` with security and testing requirements
+   - Define adversarial scenarios, load testing, critical path tests
+   - Specify data integrity checks and security testing
+
+5. **Technical Planning Phase** (Agent: `postgres-jsonb-architect` + `backend-architecture-optimizer` + `react-ai-ux-specialist`):
+   - Write `ADR-NNN-IMPLEMENTATION_PLAN.md` with detailed technical blueprint
+   - Define database schema, API endpoints, component hierarchy
+   - Break into phases with deliverables and timeline
+
+6. **Execution Planning Phase** (Agent: `orchestrator`):
+   - Write `ADR-NNN-AGENT_WORKFLOW.md` with agent assignments and dependencies
+   - Identify parallel execution opportunities
+   - Optimize timeline with critical path analysis
+   - Provide ready-to-use Task() commands
+
+7. **Approval Phase**:
+   - Review all 6 planning documents with stakeholders
+   - Update ADR-NNN-DECISION.md status to **Accepted** after approval
+   - Implementation can begin
+
+8. **Implementation Phase**:
+   - Follow ADR-NNN-IMPLEMENTATION_PLAN.md phases
+   - Use ADR-NNN-AGENT_WORKFLOW.md for agent coordination
+   - Execute tests from ADR-NNN-TEST_PLAN.md
+   - Track progress in DEVELOPMENT_LOG.md
+
+9. **Documentation Phase** (Agent: `documentation-synthesizer`):
+   - Write `ADR-NNN-TECHNICAL_DOCS.md` documenting what was implemented
+   - Include deviations from plan, lessons learned, troubleshooting guides
+   - Update ADR-NNN-DECISION.md status to **Implemented**
+   - Link from ARCHITECTURE.md to the ADR folder
+
+**Use `/plan-adr` command to automatically create the 7-document structure.**
 
 ---
 

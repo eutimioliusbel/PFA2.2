@@ -23,7 +23,8 @@ import {
   discardDraftModifications,
   getKpiStatistics,
 } from '../controllers/pfaDataController';
-import { authenticateJWT, requireOrgAccess } from '../middleware/auth';
+import { authenticateJWT } from '../middleware/auth';
+import { requirePermission } from '../middleware/requirePermission';
 
 const router = Router();
 
@@ -40,6 +41,8 @@ router.use(authenticateJWT);
 /**
  * GET /api/pfa/:orgId
  * Get merged PFA data (mirror + modifications)
+ *
+ * Required Permission: perm_Read
  *
  * Query Parameters:
  * - category: string | string[]        - Filter by category
@@ -69,11 +72,13 @@ router.use(authenticateJWT);
  *   metadata: { queryTime, filters }
  * }
  */
-router.get('/:orgId', requireOrgAccess('orgId'), getMergedPfaData);
+router.get('/:orgId', requirePermission('perm_Read', 'orgId'), getMergedPfaData);
 
 /**
  * POST /api/pfa/:orgId/draft
  * Save draft modifications (upsert to PfaModification table)
+ *
+ * Required Permission: perm_SaveDraft
  *
  * Request Body:
  * {
@@ -96,11 +101,13 @@ router.get('/:orgId', requireOrgAccess('orgId'), getMergedPfaData);
  *   errors?: [{ pfaId, error }]
  * }
  */
-router.post('/:orgId/draft', requireOrgAccess('orgId'), saveDraftModifications);
+router.post('/:orgId/draft', requirePermission('perm_SaveDraft', 'orgId'), saveDraftModifications);
 
 /**
  * POST /api/pfa/:orgId/commit
  * Commit draft modifications to PEMS (trigger sync worker)
+ *
+ * Required Permission: perm_Sync
  *
  * Request Body:
  * {
@@ -115,11 +122,13 @@ router.post('/:orgId/draft', requireOrgAccess('orgId'), saveDraftModifications);
  *   syncId?: string     // Will be available in Phase 4
  * }
  */
-router.post('/:orgId/commit', requireOrgAccess('orgId'), commitDraftModifications);
+router.post('/:orgId/commit', requirePermission('perm_Sync', 'orgId'), commitDraftModifications);
 
 /**
  * POST /api/pfa/:orgId/discard
  * Discard draft modifications (delete from PfaModification table)
+ *
+ * Required Permission: perm_SaveDraft
  *
  * Request Body:
  * {
@@ -135,11 +144,13 @@ router.post('/:orgId/commit', requireOrgAccess('orgId'), commitDraftModification
  *   discardedCount: number
  * }
  */
-router.post('/:orgId/discard', requireOrgAccess('orgId'), discardDraftModifications);
+router.post('/:orgId/discard', requirePermission('perm_SaveDraft', 'orgId'), discardDraftModifications);
 
 /**
  * GET /api/pfa/:orgId/stats
  * Get KPI statistics with cost variance calculations
+ *
+ * Required Permission: perm_Read
  *
  * Response:
  * {
@@ -155,6 +166,6 @@ router.post('/:orgId/discard', requireOrgAccess('orgId'), discardDraftModificati
  *   }
  * }
  */
-router.get('/:orgId/stats', requireOrgAccess('orgId'), getKpiStatistics);
+router.get('/:orgId/stats', requirePermission('perm_Read', 'orgId'), getKpiStatistics);
 
 export default router;

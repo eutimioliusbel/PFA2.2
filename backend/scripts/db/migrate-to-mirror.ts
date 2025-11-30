@@ -17,6 +17,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -65,7 +66,7 @@ async function migrateToMirror(): Promise<MigrationStats> {
 
     // Step 2: Count existing records
     console.log('[2/6] Counting existing PfaRecord data...');
-    stats.totalRecords = await prisma.pfaRecord.count();
+    stats.totalRecords = await prisma.pfa_records.count();
     console.log(`   ✓ Found ${stats.totalRecords} records to migrate\n`);
 
     if (stats.totalRecords === 0) {
@@ -75,7 +76,7 @@ async function migrateToMirror(): Promise<MigrationStats> {
 
     // Step 3: Check if mirror already has data (prevent duplicate migration)
     console.log('[3/6] Checking for existing mirror data...');
-    const existingMirrorCount = await prisma.pfaMirror.count();
+    const existingMirrorCount = await prisma.pfa_mirror.count();
     if (existingMirrorCount > 0) {
       console.log(`   ⚠ Warning: pfa_mirror already has ${existingMirrorCount} records`);
       const response = await confirm(
@@ -101,7 +102,7 @@ async function migrateToMirror(): Promise<MigrationStats> {
       const progressPercent = ((offset / stats.totalRecords) * 100).toFixed(1);
 
       // Fetch batch
-      const batch = await prisma.pfaRecord.findMany({
+      const batch = await prisma.pfa_records.findMany({
         skip: offset,
         take: BATCH_SIZE,
         orderBy: { createdAt: 'asc' },
@@ -111,7 +112,7 @@ async function migrateToMirror(): Promise<MigrationStats> {
       for (const record of batch) {
         try {
           // Check if already migrated
-          const existing = await prisma.pfaMirror.findFirst({
+          const existing = await prisma.pfa_mirror.findFirst({
             where: {
               organizationId: record.organizationId,
               pfaId: record.pfaId,
@@ -153,13 +154,16 @@ async function migrateToMirror(): Promise<MigrationStats> {
           };
 
           // Insert into pfa_mirror
-          await prisma.pfaMirror.create({
+          await prisma.pfa_mirror.create({
             data: {
+              id: randomUUID(),
               organizationId: record.organizationId,
+              pfaId: record.pfaId,
               data: jsonbData,
               pemsVersion: record.lastModified?.toISOString() || null,
               lastSyncedAt: new Date(),
               syncBatchId: 'migration-batch',
+              updatedAt: new Date(),
             },
           });
 
@@ -197,8 +201,8 @@ async function migrateToMirror(): Promise<MigrationStats> {
 
     // Step 6: Verify data integrity
     console.log('[6/6] Verifying data integrity...');
-    const mirrorCount = await prisma.pfaMirror.count();
-    const recordCount = await prisma.pfaRecord.count();
+    const mirrorCount = await prisma.pfa_mirror.count();
+    const recordCount = await prisma.pfa_records.count();
 
     console.log(`   Original records: ${recordCount}`);
     console.log(`   Migrated records: ${mirrorCount}`);

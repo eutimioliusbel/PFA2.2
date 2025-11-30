@@ -10,6 +10,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -24,10 +25,11 @@ async function main() {
   console.log('👤 Creating admin user...');
   const adminPassword = await bcrypt.hash('admin123', 10);
 
-  const adminUser = await prisma.user.upsert({
+  const adminUser = await prisma.users.upsert({
     where: { username: 'admin' },
     update: {},
     create: {
+      id: randomUUID(),
       username: 'admin',
       email: 'admin@pfavanguard.com',
       passwordHash: adminPassword,
@@ -36,6 +38,7 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=System%20Administrator&backgroundColor=3b82f6',
       role: 'admin',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
@@ -48,10 +51,11 @@ async function main() {
 
   console.log('👥 Creating additional users...');
 
-  const rickRector = await prisma.user.upsert({
+  const rickRector = await prisma.users.upsert({
     where: { username: 'RRECTOR' },
     update: {},
     create: {
+      id: randomUUID(),
       username: 'RRECTOR',
       email: 'rick.rector@pfavanguard.com',
       passwordHash: await bcrypt.hash('password123', 10),
@@ -60,13 +64,15 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Rick%20Rector&backgroundColor=10b981',
       role: 'user',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
-  const ubiRosa = await prisma.user.upsert({
+  const ubiRosa = await prisma.users.upsert({
     where: { username: 'UROSA' },
     update: {},
     create: {
+      id: randomUUID(),
       username: 'UROSA',
       email: 'ubi.rosa@pfavanguard.com',
       passwordHash: await bcrypt.hash('password123', 10),
@@ -75,13 +81,15 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Ubi%20Rosa&backgroundColor=f59e0b',
       role: 'user',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
-  const calvinHurford = await prisma.user.upsert({
+  const calvinHurford = await prisma.users.upsert({
     where: { username: 'CHURFORD' },
     update: {},
     create: {
+      id: randomUUID(),
       username: 'CHURFORD',
       email: 'calvin.hurford@pfavanguard.com',
       passwordHash: await bcrypt.hash('password123', 10),
@@ -90,13 +98,15 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Calvin%20Hurford&backgroundColor=8b5cf6',
       role: 'user',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
-  const tonyEstrada = await prisma.user.upsert({
+  const tonyEstrada = await prisma.users.upsert({
     where: { username: 'TESTRADA' },
     update: {},
     create: {
+      id: randomUUID(),
       username: 'TESTRADA',
       email: 'tony.estrada@pfavanguard.com',
       passwordHash: await bcrypt.hash('password123', 10),
@@ -105,13 +115,15 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Tony%20Estrada&backgroundColor=ef4444',
       role: 'user',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
-  const steveBryson = await prisma.user.upsert({
+  const steveBryson = await prisma.users.upsert({
     where: { username: 'SBRYSON' },
     update: {},
     create: {
+      id: randomUUID(),
       username: 'SBRYSON',
       email: 'steve.bryson@pfavanguard.com',
       passwordHash: await bcrypt.hash('password123', 10),
@@ -120,6 +132,7 @@ async function main() {
       avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Steve%20Bryson&backgroundColor=06b6d4',
       role: 'user',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
@@ -136,27 +149,33 @@ async function main() {
 
   console.log('🏢 Creating organizations...');
 
-  const rioOrg = await prisma.organization.upsert({
+  const rioOrg = await prisma.organizations.upsert({
     where: { code: 'RIO' },
     update: {},
     create: {
+      id: randomUUID(),
       code: 'RIO',
       name: 'Rio Tinto Project',
       description: 'Rio Tinto construction project',
+      updatedAt: new Date(),
       logoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=RIO&backgroundColor=f59e0b',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
-  const portArthurOrg = await prisma.organization.upsert({
+  const portArthurOrg = await prisma.organizations.upsert({
     where: { code: 'PORTARTHUR' },
     update: {},
     create: {
+      id: randomUUID(),
       code: 'PORTARTHUR',
       name: 'Port Arthur Project',
       description: 'Port Arthur LNG construction project',
+      updatedAt: new Date(),
       logoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=PORTARTHUR&backgroundColor=8b5cf6',
       isActive: true,
+      updatedAt: new Date(),
     },
   });
 
@@ -169,7 +188,7 @@ async function main() {
 
   console.log('🔗 Linking admin to organizations...');
 
-  await prisma.userOrganization.upsert({
+  await prisma.user_organizations.upsert({
     where: {
       userId_organizationId: {
         userId: adminUser.id,
@@ -178,13 +197,15 @@ async function main() {
     },
     update: {},
     create: {
+      id: randomUUID(),
       userId: adminUser.id,
       organizationId: rioOrg.id,
       role: 'owner',
+      modifiedAt: new Date(),
     },
   });
 
-  await prisma.userOrganization.upsert({
+  await prisma.user_organizations.upsert({
     where: {
       userId_organizationId: {
         userId: adminUser.id,
@@ -193,9 +214,11 @@ async function main() {
     },
     update: {},
     create: {
+      id: randomUUID(),
       userId: adminUser.id,
       organizationId: portArthurOrg.id,
       role: 'owner',
+      modifiedAt: new Date(),
     },
   });
 
@@ -212,7 +235,7 @@ async function main() {
 
   // Link users to both RIO and PORTARTHUR
   for (const user of users) {
-    await prisma.userOrganization.upsert({
+    await prisma.user_organizations.upsert({
       where: {
         userId_organizationId: {
           userId: user.id,
@@ -221,14 +244,16 @@ async function main() {
       },
       update: {},
       create: {
-        userId: user.id,
+      id: randomUUID(),
+      userId: user.id,
         organizationId: rioOrg.id,
         role: 'member',
-      },
+      modifiedAt: new Date(),
+    },
     });
     console.log(`✓ ${user.username} linked to ${rioOrg.code}`);
 
-    await prisma.userOrganization.upsert({
+    await prisma.user_organizations.upsert({
       where: {
         userId_organizationId: {
           userId: user.id,
@@ -237,10 +262,12 @@ async function main() {
       },
       update: {},
       create: {
-        userId: user.id,
+      id: randomUUID(),
+      userId: user.id,
         organizationId: portArthurOrg.id,
         role: 'member',
-      },
+      modifiedAt: new Date(),
+    },
     });
     console.log(`✓ ${user.username} linked to ${portArthurOrg.code}`);
   }
@@ -253,7 +280,7 @@ async function main() {
 
   console.log('🤖 Creating AI provider configurations...');
 
-  const geminiProvider = await prisma.aiProvider.upsert({
+  const geminiProvider = await prisma.ai_providers.upsert({
     where: { id: 'gemini-default' },
     update: {},
     create: {
@@ -273,10 +300,11 @@ async function main() {
       maxTokensPerRequest: 32768,
       maxRequestsPerMinute: 60,
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
-  const openaiProvider = await prisma.aiProvider.upsert({
+  const openaiProvider = await prisma.ai_providers.upsert({
     where: { id: 'openai-default' },
     update: {},
     create: {
@@ -295,10 +323,11 @@ async function main() {
       maxTokensPerRequest: 128000,
       maxRequestsPerMinute: 60,
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
-  const anthropicProvider = await prisma.aiProvider.upsert({
+  const anthropicProvider = await prisma.ai_providers.upsert({
     where: { id: 'anthropic-default' },
     update: {},
     create: {
@@ -317,6 +346,7 @@ async function main() {
       maxTokensPerRequest: 200000,
       maxRequestsPerMinute: 60,
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
@@ -330,10 +360,11 @@ async function main() {
 
   console.log('⚙️  Creating organization AI configurations...');
 
-  await prisma.organizationAiConfig.upsert({
+  await prisma.organization_ai_configs.upsert({
     where: { organizationId: rioOrg.id },
     update: {},
     create: {
+      id: randomUUID(),
       organizationId: rioOrg.id,
       enabled: true,
       accessLevel: 'full-access',
@@ -346,13 +377,15 @@ async function main() {
       includeHistoricalData: false,
       enableSemanticCache: true,
       cacheExpirationHours: 24,
+      updatedAt: new Date(),
     },
   });
 
-  await prisma.organizationAiConfig.upsert({
+  await prisma.organization_ai_configs.upsert({
     where: { organizationId: portArthurOrg.id },
     update: {},
     create: {
+      id: randomUUID(),
       organizationId: portArthurOrg.id,
       enabled: true,
       accessLevel: 'full-access',
@@ -365,6 +398,7 @@ async function main() {
       includeHistoricalData: false,
       enableSemanticCache: true,
       cacheExpirationHours: 24,
+      updatedAt: new Date(),
     },
   });
 
@@ -378,7 +412,7 @@ async function main() {
   console.log('🔌 Creating global PEMS API configurations (system-wide)...');
 
   // PEMS PFA Read API - griddata endpoint for reading PFA records
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'pems-global-pfa-read' },
     update: {},
     create: {
@@ -391,11 +425,12 @@ async function main() {
       operationType: 'read',
       feeds: JSON.stringify([{ entity: 'pfa', views: ['Timeline Lab', 'Matrix', 'Grid Lab', 'PFA 1.0 Lab', 'PFA Master Data'] }]),
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // PEMS PFA Write API - UserDefinedScreenService for creating/updating PFA records
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'pems-global-pfa-write' },
     update: {},
     create: {
@@ -408,11 +443,12 @@ async function main() {
       operationType: 'write',
       feeds: JSON.stringify([{ entity: 'pfa', operation: 'write' }]),
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // PEMS Assets API - assetdefaults endpoint (OpenAPI spec)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'pems-global-assets' },
     update: {},
     create: {
@@ -425,11 +461,12 @@ async function main() {
       operationType: 'read',
       feeds: JSON.stringify([{ entity: 'asset_master', views: ['Asset Master'] }]),
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // PEMS Classes API - categories endpoint (OpenAPI spec)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'pems-global-classes' },
     update: {},
     create: {
@@ -442,11 +479,12 @@ async function main() {
       operationType: 'read',
       feeds: JSON.stringify([{ entity: 'classifications', views: ['Classifications Master Data'] }]),
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // PEMS Organizations API - organization endpoint to fetch available organizations
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'pems-global-organizations' },
     update: {},
     create: {
@@ -459,6 +497,7 @@ async function main() {
       operationType: 'read',
       feeds: JSON.stringify([{ entity: 'organizations', views: ['Admin Dashboard'] }]),
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
@@ -475,7 +514,7 @@ async function main() {
   console.log('🤖 Creating global AI provider API templates...');
 
   // Google Gemini (Global Template)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'ai-global-gemini' },
     update: {},
     create: {
@@ -487,11 +526,12 @@ async function main() {
       authType: 'apiKey',
       operationType: 'read-write',
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // OpenAI (Global Template)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'ai-global-openai' },
     update: {},
     create: {
@@ -503,11 +543,12 @@ async function main() {
       authType: 'apiKey',
       operationType: 'read-write',
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // Anthropic Claude (Global Template)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'ai-global-anthropic' },
     update: {},
     create: {
@@ -519,11 +560,12 @@ async function main() {
       authType: 'apiKey',
       operationType: 'read-write',
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // Azure OpenAI (Global Template)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'ai-global-azure' },
     update: {},
     create: {
@@ -535,11 +577,12 @@ async function main() {
       authType: 'apiKey',
       operationType: 'read-write',
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
   // xAI Grok (Global Template)
-  await prisma.apiConfiguration.upsert({
+  await prisma.api_configurations.upsert({
     where: { id: 'ai-global-grok' },
     update: {},
     create: {
@@ -551,6 +594,7 @@ async function main() {
       authType: 'apiKey',
       operationType: 'read-write',
       status: 'untested',
+      updatedAt: new Date(),
     },
   });
 
@@ -591,7 +635,7 @@ async function main() {
     { field: 'isFundsTransferable', label: 'Is Funds Transferable', enabled: false, order: 22 }
   ];
 
-  await prisma.fieldConfiguration.upsert({
+  await prisma.field_configurations.upsert({
     where: { id: 'default-pfa-config' },
     update: {},
     create: {
@@ -605,6 +649,7 @@ async function main() {
       dateFormat: 'YYYY-MM-DD',
       delimiter: ',',
       encoding: 'UTF-8',
+      updatedAt: new Date(),
     },
   });
 
@@ -617,7 +662,7 @@ async function main() {
   console.log('🔗 Creating data source mappings...');
 
   // Get all API configurations with feeds
-  const apiConfigs = await prisma.apiConfiguration.findMany({
+  const apiConfigs = await prisma.api_configurations.findMany({
     where: { feeds: { not: null } }
   });
 
@@ -632,7 +677,7 @@ async function main() {
         const entityType = feed.entity;
 
         // Check if mapping already exists
-        const existing = await prisma.dataSourceMapping.findFirst({
+        const existing = await prisma.data_source_mappings.findFirst({
           where: {
             entityType,
             organizationId: config.organizationId,
@@ -646,7 +691,7 @@ async function main() {
         }
 
         // Create new mapping
-        await prisma.dataSourceMapping.create({
+        await prisma.data_source_mappings.create({
           data: {
             entityType,
             organizationId: config.organizationId,

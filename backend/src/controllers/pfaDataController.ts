@@ -24,10 +24,10 @@
  */
 
 import { Response } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
-import { getWorkerInstance } from '../workers/PemsSyncWorker';
+import pfaMirrorService from '../services/pfa/PfaMirrorService';
 
 const prisma = new PrismaClient();
 
@@ -35,42 +35,10 @@ const prisma = new PrismaClient();
 // Types & Interfaces
 // ============================================================================
 
-interface PfaFilter {
-  category?: string | string[];
-  class?: string | string[];
-  dor?: string | string[];
-  source?: string | string[];
-  areaSilo?: string | string[];
-  manufacturer?: string | string[];
-  model?: string | string[];
-  dateRangeStart?: string;
-  dateRangeEnd?: string;
-  isActualized?: boolean;
-  isDiscontinued?: boolean;
-  isFundsTransferable?: boolean;
-  syncState?: string | string[];
-  searchText?: string;
-}
-
-interface PaginationParams {
-  page?: number;
-  pageSize?: number;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
-
 interface DraftModification {
   pfaId: string;
   delta: Record<string, any>;
   changeReason?: string;
-}
-
-interface MergedPfaRecord {
-  id: string;
-  data: Record<string, any>;
-  syncState: string;
-  modifiedAt?: Date;
-  modifiedBy?: string;
 }
 
 // ============================================================================
@@ -101,66 +69,64 @@ export const getMergedPfaData = async (req: AuthRequest, res: Response) => {
 
   try {
     // Extract filters from query params
-    const filters: PfaFilter = {
-      category: req.query.category as string | string[],
-      class: req.query.class as string | string[],
-      dor: req.query.dor as string | string[],
-      source: req.query.source as string | string[],
-      areaSilo: req.query.areaSilo as string | string[],
-      manufacturer: req.query.manufacturer as string | string[],
-      model: req.query.model as string | string[],
-      dateRangeStart: req.query.dateRangeStart as string,
-      dateRangeEnd: req.query.dateRangeEnd as string,
-      isActualized: req.query.isActualized === 'true',
-      isDiscontinued: req.query.isDiscontinued === 'true',
-      isFundsTransferable: req.query.isFundsTransferable === 'true',
-      syncState: req.query.syncState as string | string[],
-      searchText: req.query.searchText as string,
-    };
+    const category = req.query.category as string;
+    const classFilter = req.query.class as string;
+    const dor = req.query.dor as string;
+    const source = req.query.source as string;
+    const searchText = req.query.searchText as string;
 
     // Extract pagination params
-    const pagination: PaginationParams = {
-      page: req.query.page ? parseInt(req.query.page as string) : 1,
-      pageSize: req.query.pageSize ? parseInt(req.query.pageSize as string) : 100,
-      sortBy: (req.query.sortBy as string) || 'forecastStart',
-      sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'asc',
-    };
+    const page = req.query.page ? parseInt(req.query.page as string) : 1;
+    const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 100;
+    const offset = (page - 1) * pageSize;
 
-    // Build WHERE clause for filtering
-    const whereConditions = buildWhereClause(orgId, filters);
+    // Call PfaMirrorService to get merged views
+    const mergedRecords = await pfaMirrorService.getMergedViews(
+      orgId,
+      userId,
+      {
+        category,
+        class: classFilter,
+        dor,
+        source,
+        search: searchText,
+        limit: pageSize,
+        offset
+      }
+    );
 
-    // Execute merge query with PostgreSQL JSONB operators
-    // Note: Using raw SQL for optimal JSONB merge performance
-    const mergedRecords = await executeMergeQuery(orgId, whereConditions, pagination, userId);
-
-    // Get total count for pagination
-    const totalCount = await getTotalCount(orgId, whereConditions, userId);
+    // Get total count using efficient count query
+    const totalCount = await pfaMirrorService.getCount(orgId, {
+      category,
+      class: classFilter,
+      source,
+      dor,
+      search: searchText
+    });
 
     const duration = Date.now() - startTime;
     logger.info(`[PfaDataController] Merge query completed`, {
       orgId,
       recordsReturned: mergedRecords.length,
-      totalCount,
       duration: `${duration}ms`,
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: mergedRecords,
       pagination: {
-        page: pagination.page,
-        pageSize: pagination.pageSize,
+        page,
+        pageSize,
         totalRecords: totalCount,
-        totalPages: Math.ceil(totalCount / (pagination.pageSize || 100)),
+        totalPages: Math.ceil(totalCount / pageSize),
       },
       metadata: {
         queryTime: duration,
-        filters: Object.keys(filters).filter(k => filters[k as keyof PfaFilter] !== undefined),
       },
     });
   } catch (error) {
     logger.error('[PfaDataController] Failed to get merged PFA data:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'QUERY_FAILED',
       message: error instanceof Error ? error.message : 'Failed to retrieve PFA data',
     });
@@ -221,73 +187,20 @@ export const saveDraftModifications = async (req: AuthRequest, res: Response) =>
     const savedModifications: any[] = [];
     const errors: any[] = [];
 
-    // Process each modification
+    // Process each modification using PfaMirrorService
     for (const mod of modifications) {
       try {
-        // Find mirror record by pfaId
-        const mirror = await prisma.pfaMirror.findFirst({
-          where: {
-            organizationId: orgId,
-            pfaId: mod.pfaId,
-          },
+        await pfaMirrorService.saveDraft({
+          organizationId: orgId,
+          userId,
+          pfaId: mod.pfaId,
+          delta: mod.delta,
+          sessionId: finalSessionId,
+          changeReason: mod.changeReason
         });
-
-        if (!mirror) {
-          errors.push({
-            pfaId: mod.pfaId,
-            error: 'Mirror record not found',
-          });
-          continue;
-        }
-
-        // Extract modified field names from delta
-        const modifiedFields = Object.keys(mod.delta);
-
-        // Check if modification already exists
-        const existingMod = await prisma.pfaModification.findFirst({
-          where: {
-            mirrorId: mirror.id,
-            sessionId: finalSessionId,
-            syncState: 'draft',
-            userId: userId,
-          },
-        });
-
-        let modification;
-        if (existingMod) {
-          // Update existing modification
-          modification = await prisma.pfaModification.update({
-            where: { id: existingMod.id },
-            data: {
-              delta: mod.delta as Prisma.JsonObject,
-              modifiedFields: modifiedFields as Prisma.JsonArray,
-              changeReason: mod.changeReason,
-              currentVersion: { increment: 1 },
-              updatedAt: new Date(),
-            },
-          });
-        } else {
-          // Create new modification
-          modification = await prisma.pfaModification.create({
-            data: {
-              mirrorId: mirror.id,
-              organizationId: orgId,
-              userId: userId,
-              delta: mod.delta as Prisma.JsonObject,
-              sessionId: finalSessionId,
-              syncState: 'draft',
-              modifiedFields: modifiedFields as Prisma.JsonArray,
-              changeReason: mod.changeReason,
-              baseVersion: 1,
-              currentVersion: 1,
-            },
-          });
-        }
 
         savedModifications.push({
-          pfaId: mod.pfaId,
-          modificationId: modification.id,
-          version: modification.currentVersion,
+          pfaId: mod.pfaId
         });
       } catch (error) {
         logger.error(`[PfaDataController] Failed to save modification for ${mod.pfaId}:`, error);
@@ -307,7 +220,7 @@ export const saveDraftModifications = async (req: AuthRequest, res: Response) =>
       duration: `${duration}ms`,
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: `Saved ${savedModifications.length} modifications`,
       sessionId: finalSessionId,
@@ -319,7 +232,7 @@ export const saveDraftModifications = async (req: AuthRequest, res: Response) =>
     });
   } catch (error) {
     logger.error('[PfaDataController] Failed to save draft modifications:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SAVE_FAILED',
       message: error instanceof Error ? error.message : 'Failed to save modifications',
     });
@@ -374,7 +287,7 @@ export const commitDraftModifications = async (req: AuthRequest, res: Response) 
       whereClause.sessionId = sessionId;
     }
 
-    const drafts = await prisma.pfaModification.findMany({
+    const drafts = await prisma.pfa_modification.findMany({
       where: whereClause,
     });
 
@@ -386,7 +299,7 @@ export const commitDraftModifications = async (req: AuthRequest, res: Response) 
     }
 
     // Update syncState to 'committed' and set committedAt timestamp
-    await prisma.pfaModification.updateMany({
+    await prisma.pfa_modification.updateMany({
       where: whereClause,
       data: {
         syncState: 'committed',
@@ -400,13 +313,12 @@ export const commitDraftModifications = async (req: AuthRequest, res: Response) 
       sessionId,
     });
 
-    // TODO: Trigger write sync worker (Phase 4 - PEMS Write API)
     // const worker = getWorkerInstance();
     // const syncId = await worker?.triggerWriteSync(orgId, drafts);
 
     const duration = Date.now() - startTime;
 
-    res.json({
+    return res.json({
       success: true,
       message: `Committed ${drafts.length} modifications`,
       committedCount: drafts.length,
@@ -418,7 +330,7 @@ export const commitDraftModifications = async (req: AuthRequest, res: Response) 
     });
   } catch (error) {
     logger.error('[PfaDataController] Failed to commit modifications:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'COMMIT_FAILED',
       message: error instanceof Error ? error.message : 'Failed to commit modifications',
     });
@@ -477,7 +389,7 @@ export const discardDraftModifications = async (req: AuthRequest, res: Response)
 
     if (pfaIds && pfaIds.length > 0) {
       // Get mirror IDs for the specified pfaIds
-      const mirrors = await prisma.pfaMirror.findMany({
+      const mirrors = await prisma.pfa_mirror.findMany({
         where: {
           organizationId: orgId,
           pfaId: { in: pfaIds },
@@ -497,7 +409,7 @@ export const discardDraftModifications = async (req: AuthRequest, res: Response)
     }
 
     // Delete draft modifications
-    const result = await prisma.pfaModification.deleteMany({
+    const result = await prisma.pfa_modification.deleteMany({
       where: whereClause,
     });
 
@@ -509,7 +421,7 @@ export const discardDraftModifications = async (req: AuthRequest, res: Response)
       discardedCount: result.count,
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: `Discarded ${result.count} draft modifications`,
       discardedCount: result.count,
@@ -519,7 +431,7 @@ export const discardDraftModifications = async (req: AuthRequest, res: Response)
     });
   } catch (error) {
     logger.error('[PfaDataController] Failed to discard modifications:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'DISCARD_FAILED',
       message: error instanceof Error ? error.message : 'Failed to discard modifications',
     });
@@ -558,7 +470,7 @@ export const getKpiStatistics = async (req: AuthRequest, res: Response) => {
       duration: `${duration}ms`,
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: stats,
       metadata: {
@@ -568,7 +480,7 @@ export const getKpiStatistics = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     logger.error('[PfaDataController] Failed to get KPI statistics:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'STATS_FAILED',
       message: error instanceof Error ? error.message : 'Failed to retrieve statistics',
     });
@@ -578,128 +490,6 @@ export const getKpiStatistics = async (req: AuthRequest, res: Response) => {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Build WHERE clause for filtering merged PFA data
- */
-function buildWhereClause(orgId: string, filters: PfaFilter): string {
-  const conditions: string[] = [`m.organization_id = '${orgId}'`];
-
-  // Multi-value filters (use generated columns for performance)
-  if (filters.category) {
-    const categories = Array.isArray(filters.category) ? filters.category : [filters.category];
-    conditions.push(`m.category IN (${categories.map(c => `'${c}'`).join(', ')})`);
-  }
-
-  if (filters.class) {
-    const classes = Array.isArray(filters.class) ? filters.class : [filters.class];
-    conditions.push(`m.class IN (${classes.map(c => `'${c}'`).join(', ')})`);
-  }
-
-  if (filters.dor) {
-    const dors = Array.isArray(filters.dor) ? filters.dor : [filters.dor];
-    conditions.push(`m.dor IN (${dors.map(d => `'${d}'`).join(', ')})`);
-  }
-
-  if (filters.source) {
-    const sources = Array.isArray(filters.source) ? filters.source : [filters.source];
-    conditions.push(`m.source IN (${sources.map(s => `'${s}'`).join(', ')})`);
-  }
-
-  // Date range filters
-  if (filters.dateRangeStart) {
-    conditions.push(`m.forecast_start >= '${filters.dateRangeStart}'`);
-  }
-
-  if (filters.dateRangeEnd) {
-    conditions.push(`m.forecast_end <= '${filters.dateRangeEnd}'`);
-  }
-
-  // Boolean filters
-  if (filters.isActualized !== undefined) {
-    conditions.push(`m.is_actualized = ${filters.isActualized}`);
-  }
-
-  if (filters.isDiscontinued !== undefined) {
-    conditions.push(`m.is_discontinued = ${filters.isDiscontinued}`);
-  }
-
-  // Full-text search (searches in JSONB data field)
-  if (filters.searchText) {
-    // Use PostgreSQL JSONB text search
-    conditions.push(`m.data::text ILIKE '%${filters.searchText}%'`);
-  }
-
-  return conditions.join(' AND ');
-}
-
-/**
- * Execute merge query with JSONB operators
- *
- * Uses PostgreSQL's || operator to merge mirror.data with modification.delta
- * Returns merged records with sync state indicators
- */
-async function executeMergeQuery(
-  orgId: string,
-  whereClause: string,
-  pagination: PaginationParams,
-  userId?: string
-): Promise<MergedPfaRecord[]> {
-  const offset = ((pagination.page || 1) - 1) * (pagination.pageSize || 100);
-  const limit = pagination.pageSize || 100;
-
-  // Sort column mapping (use generated columns for performance)
-  const sortByColumn = pagination.sortBy === 'category' ? 'm.category'
-    : pagination.sortBy === 'forecastStart' ? 'm.forecast_start'
-    : pagination.sortBy === 'forecastEnd' ? 'm.forecast_end'
-    : 'm.forecast_start'; // default
-
-  const sortOrder = pagination.sortOrder || 'asc';
-
-  // JSONB merge query using PostgreSQL || operator
-  // Merges mirror baseline with user modifications
-  const query = `
-    SELECT
-      m.id,
-      m.pfa_id as "pfaId",
-      COALESCE(m.data, '{}'::jsonb) || COALESCE(mod.delta, '{}'::jsonb) AS data,
-      CASE
-        WHEN mod.sync_state IS NOT NULL THEN mod.sync_state
-        ELSE 'pristine'
-      END as sync_state,
-      mod.updated_at as modified_at,
-      mod.user_id as modified_by
-    FROM pfa_mirror m
-    LEFT JOIN pfa_modification mod
-      ON m.id = mod.mirror_id
-      AND mod.sync_state IN ('draft', 'committed', 'syncing')
-      ${userId ? `AND mod.user_id = '${userId}'` : ''}
-    WHERE ${whereClause}
-    ORDER BY ${sortByColumn} ${sortOrder}
-    LIMIT ${limit} OFFSET ${offset}
-  `;
-
-  const result = await prisma.$queryRawUnsafe<MergedPfaRecord[]>(query);
-  return result;
-}
-
-/**
- * Get total count for pagination
- */
-async function getTotalCount(orgId: string, whereClause: string, userId?: string): Promise<number> {
-  const query = `
-    SELECT COUNT(DISTINCT m.id) as count
-    FROM pfa_mirror m
-    LEFT JOIN pfa_modification mod
-      ON m.id = mod.mirror_id
-      AND mod.sync_state IN ('draft', 'committed', 'syncing')
-      ${userId ? `AND mod.user_id = '${userId}'` : ''}
-    WHERE ${whereClause}
-  `;
-
-  const result = await prisma.$queryRawUnsafe<{ count: bigint }[]>(query);
-  return Number(result[0]?.count || 0);
-}
 
 /**
  * Execute KPI aggregation query
@@ -712,9 +502,9 @@ async function executeKpiQuery(orgId: string): Promise<any> {
   const query = `
     SELECT
       COUNT(*) as total_records,
-      SUM(CASE WHEN m.is_actualized THEN 1 ELSE 0 END) as actualized_count,
-      SUM(CASE WHEN m.is_discontinued THEN 1 ELSE 0 END) as discontinued_count,
-      SUM(CASE WHEN mod.sync_state = 'draft' THEN 1 ELSE 0 END) as draft_count,
+      SUM(CASE WHEN m."isActualized" THEN 1 ELSE 0 END) as actualized_count,
+      SUM(CASE WHEN m."isDiscontinued" THEN 1 ELSE 0 END) as discontinued_count,
+      SUM(CASE WHEN mod."syncState" = 'draft' THEN 1 ELSE 0 END) as draft_count,
 
       -- Cost aggregations (simplified - needs proper calculation based on source type)
       SUM((merged_data->>'monthlyRate')::numeric) FILTER (WHERE merged_data->>'source' = 'Rental') as total_monthly_rental,
@@ -730,15 +520,15 @@ async function executeKpiQuery(orgId: string): Promise<any> {
       SELECT
         m.*,
         COALESCE(m.data, '{}'::jsonb) || COALESCE(mod.delta, '{}'::jsonb) AS merged_data,
-        mod.sync_state
+        mod."syncState"
       FROM pfa_mirror m
       LEFT JOIN pfa_modification mod
-        ON m.id = mod.mirror_id
-        AND mod.sync_state IN ('draft', 'committed', 'syncing')
-      WHERE m.organization_id = '${orgId}'
+        ON m.id = mod."mirrorId"
+        AND mod."syncState" IN ('draft', 'committed', 'syncing')
+      WHERE m."organizationId" = '${orgId}'
     ) AS merged_view
     JOIN pfa_mirror m ON merged_view.id = m.id
-    LEFT JOIN pfa_modification mod ON m.id = mod.mirror_id
+    LEFT JOIN pfa_modification mod ON m.id = mod."mirrorId"
   `;
 
   const result = await prisma.$queryRawUnsafe<any[]>(query);

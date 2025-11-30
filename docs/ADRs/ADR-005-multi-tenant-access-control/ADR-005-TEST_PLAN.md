@@ -261,6 +261,601 @@ describe('Security: External Entity Protection', () => {
     expect(unlinkResponse.status).toBe(401);
   });
 });
+
+// Test 8: API Server Management Authorization
+describe('Security: API Server Management Authorization', () => {
+  it('TEST-API-001: should prevent create API Server without permission', async () => {
+    // Attack: User without perm_ManageSettings tries to create API server
+    const user = await createUser({
+      username: 'bob',
+      organizationIds: ['HOLNG'],
+      capabilities: { perm_ManageSettings: false }
+    });
+
+    const response = await request(app)
+      .post('/api/api-servers')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({
+        organizationId: 'HOLNG',
+        name: 'Test Server',
+        baseUrl: 'https://api.test.com',
+        authType: 'bearer'
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Requires perm_ManageSettings permission');
+  });
+
+  it('TEST-API-002: should allow create API Server with permission', async () => {
+    // Valid: User with perm_ManageSettings creates API server for their org
+    const user = await createUser({
+      username: 'alice',
+      organizationIds: ['HOLNG'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    const response = await request(app)
+      .post('/api/api-servers')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({
+        organizationId: 'HOLNG',
+        name: 'Test Server',
+        baseUrl: 'https://api.test.com',
+        authType: 'bearer'
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.organizationId).toBe('HOLNG');
+    expect(response.body.name).toBe('Test Server');
+  });
+
+  it('TEST-API-003: should prevent edit API Server in different org', async () => {
+    // Attack: User with perm_ManageSettings for RIO tries to edit HOLNG's server
+    const holngServer = await createApiServer({
+      organizationId: 'HOLNG',
+      name: 'HOLNG Server'
+    });
+
+    const user = await createUser({
+      username: 'bob',
+      organizationIds: ['RIO'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    const response = await request(app)
+      .patch(`/api/api-servers/${holngServer.id}`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ name: 'Hacked' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("You don't have permission to manage this organization's API servers");
+  });
+
+  it('TEST-API-004: should prevent delete API Server without permission', async () => {
+    // Attack: User without perm_ManageSettings tries to delete API server
+    const bechServer = await createApiServer({
+      organizationId: 'BECH',
+      name: 'BECH Server'
+    });
+
+    const user = await createUser({
+      username: 'charlie',
+      organizationIds: ['BECH'],
+      capabilities: { perm_ManageSettings: false }
+    });
+
+    const response = await request(app)
+      .delete(`/api/api-servers/${bechServer.id}`)
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Requires perm_ManageSettings permission');
+  });
+
+  it('TEST-API-005: should allow test API Server without permission', async () => {
+    // Valid: Testing is a read operation, doesn't require perm_ManageSettings
+    const holngServer = await createApiServer({
+      organizationId: 'HOLNG',
+      name: 'HOLNG Server',
+      baseUrl: 'https://api.test.com'
+    });
+
+    const user = await createUser({
+      username: 'bob',
+      organizationIds: ['HOLNG'],
+      capabilities: { perm_ManageSettings: false }
+    });
+
+    const response = await request(app)
+      .post(`/api/api-servers/${holngServer.id}/test`)
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBeTruthy();
+  });
+});
+
+// Test 9: Organization Service Status Cascading to API Servers
+describe('Security: Organization Status Cascading', () => {
+  it('TEST-CASCADE-001: should suspend organization affects API servers', async () => {
+    // Setup: Organization with 3 API servers
+    const org = await createOrganization({
+      code: 'RIO',
+      name: 'Rio Tinto',
+      serviceStatus: 'active'
+    });
+
+    const servers = await Promise.all([
+      createApiServer({ organizationId: org.id, name: 'Server 1' }),
+      createApiServer({ organizationId: org.id, name: 'Server 2' }),
+      createApiServer({ organizationId: org.id, name: 'Server 3' })
+    ]);
+
+    // Action: Suspend organization
+    const response = await updateOrganization(adminToken, org.id, {
+      serviceStatus: 'suspended'
+    });
+
+    expect(response.status).toBe(200);
+
+    // Verify: API servers exist but connections should fail
+    const serverList = await prisma.apiServer.findMany({
+      where: { organizationId: org.id }
+    });
+    expect(serverList.length).toBe(3);
+
+    // Test connection should fail
+    const testResponse = await request(app)
+      .post(`/api/api-servers/${servers[0].id}/test`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(testResponse.status).toBe(403);
+    expect(testResponse.body.error).toBe('Organization suspended');
+  });
+
+  it('TEST-CASCADE-002: should prevent API Server test during org suspension', async () => {
+    // Setup: Suspended organization with API server
+    const org = await createOrganization({
+      code: 'HOLNG',
+      serviceStatus: 'suspended'
+    });
+
+    const server = await createApiServer({
+      organizationId: org.id,
+      name: 'HOLNG Server'
+    });
+
+    // Action: Test API server
+    const response = await request(app)
+      .post(`/api/api-servers/${server.id}/test`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Cannot test - Organization is suspended');
+  });
+
+  it('TEST-CASCADE-003: should reactivate organization restores API servers', async () => {
+    // Setup: Suspended organization
+    const org = await createOrganization({
+      code: 'RIO',
+      serviceStatus: 'suspended'
+    });
+
+    const server = await createApiServer({
+      organizationId: org.id,
+      name: 'RIO Server'
+    });
+
+    // Action: Reactivate organization
+    const response = await updateOrganization(adminToken, org.id, {
+      serviceStatus: 'active'
+    });
+
+    expect(response.status).toBe(200);
+
+    // Verify: API server test succeeds
+    const testResponse = await request(app)
+      .post(`/api/api-servers/${server.id}/test`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(testResponse.status).toBe(200);
+    expect(testResponse.body.success).toBeTruthy();
+  });
+
+  it('TEST-CASCADE-004: should delete organization cascades to API servers', async () => {
+    // Setup: Local organization with 2 API servers
+    const org = await createOrganization({
+      code: 'BECH',
+      isExternal: false
+    });
+
+    await createApiServer({ organizationId: org.id, name: 'Server 1' });
+    await createApiServer({ organizationId: org.id, name: 'Server 2' });
+
+    // Action: Delete organization
+    const response = await deleteOrganization(adminToken, org.id);
+
+    expect(response.status).toBe(200);
+
+    // Verify: Organization and API servers deleted (onDelete: Cascade)
+    const orgExists = await prisma.organization.findUnique({
+      where: { id: org.id }
+    });
+    expect(orgExists).toBeNull();
+
+    const serversExist = await prisma.apiServer.findMany({
+      where: { organizationId: org.id }
+    });
+    expect(serversExist.length).toBe(0);
+  });
+
+  it('TEST-CASCADE-005: should prevent delete external org with API servers', async () => {
+    // Attack: Try to delete external organization with API servers
+    const pemsOrg = await createOrganization({
+      code: 'PEMS_Global',
+      isExternal: true,
+      externalId: 'PEMS-ORG-456'
+    });
+
+    await Promise.all([1, 2, 3, 4, 5].map(i =>
+      createApiServer({
+        organizationId: pemsOrg.id,
+        name: `Server ${i}`
+      })
+    ));
+
+    const response = await deleteOrganization(adminToken, pemsOrg.id);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Cannot delete PEMS-managed organization');
+    expect(response.body.recommendation).toContain('Suspend or unlink instead');
+  });
+});
+
+// Test 10: API Server Multi-Tenant Isolation
+describe('Security: API Server Multi-Tenant Isolation', () => {
+  it('TEST-ISOLATION-001: should prevent user from seeing other org API servers', async () => {
+    // Setup: User in HOLNG, RIO has 3 API servers
+    const user = await createUser({
+      username: 'alice',
+      organizationIds: ['HOLNG'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    await createApiServer({ organizationId: 'HOLNG', name: 'HOLNG Server' });
+    await createApiServer({ organizationId: 'RIO', name: 'RIO Server 1' });
+    await createApiServer({ organizationId: 'RIO', name: 'RIO Server 2' });
+    await createApiServer({ organizationId: 'RIO', name: 'RIO Server 3' });
+
+    // Action: Get API servers (filtered by user's org)
+    const response = await request(app)
+      .get('/api/api-servers')
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBe(1);
+    expect(response.body[0].organizationId).toBe('HOLNG');
+    expect(response.body.every(s => s.organizationId !== 'RIO')).toBe(true);
+  });
+
+  it('TEST-ISOLATION-002: should show correct servers for multi-org admin', async () => {
+    // Setup: User with perm_ManageSettings for both HOLNG and RIO
+    const user = await createUser({
+      username: 'bob',
+      organizationIds: ['HOLNG', 'RIO'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    await createApiServer({ organizationId: 'HOLNG', name: 'HOLNG Server' });
+    await createApiServer({ organizationId: 'RIO', name: 'RIO Server 1' });
+    await createApiServer({ organizationId: 'RIO', name: 'RIO Server 2' });
+
+    // Action: Get HOLNG servers
+    const holngResponse = await request(app)
+      .get('/api/api-servers?organizationId=HOLNG')
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(holngResponse.status).toBe(200);
+    expect(holngResponse.body.length).toBe(1);
+    expect(holngResponse.body[0].organizationId).toBe('HOLNG');
+
+    // Action: Get RIO servers
+    const rioResponse = await request(app)
+      .get('/api/api-servers?organizationId=RIO')
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(rioResponse.status).toBe(200);
+    expect(rioResponse.body.length).toBe(2);
+    expect(rioResponse.body.every(s => s.organizationId === 'RIO')).toBe(true);
+  });
+
+  it('TEST-ISOLATION-003: should prevent create API server for unauthorized org', async () => {
+    // Attack: User with perm_ManageSettings for BECH tries to create server for HOLNG
+    const user = await createUser({
+      username: 'charlie',
+      organizationIds: ['BECH'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    const response = await request(app)
+      .post('/api/api-servers')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({
+        organizationId: 'HOLNG',
+        name: 'Hack',
+        baseUrl: 'https://evil.com',
+        authType: 'bearer'
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("You don't have permission to manage HOLNG's API servers");
+  });
+
+  it('TEST-ISOLATION-004: should update API server list on org switch', async () => {
+    // Setup: User switches from HOLNG to RIO
+    const user = await createUser({
+      username: 'alice',
+      organizationIds: ['HOLNG', 'RIO'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    await createApiServer({ organizationId: 'HOLNG', name: 'HOLNG Server 1' });
+    await createApiServer({ organizationId: 'HOLNG', name: 'HOLNG Server 2' });
+    await createApiServer({ organizationId: 'RIO', name: 'RIO Server' });
+
+    // Action: Get API servers (initially context is HOLNG)
+    const initialResponse = await request(app)
+      .get('/api/api-servers?organizationId=HOLNG')
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(initialResponse.body.length).toBe(2);
+
+    // Action: Switch context to RIO
+    await request(app)
+      .post('/api/users/switch-context')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ organizationId: 'RIO' });
+
+    // Action: Get API servers (now context is RIO)
+    const rioResponse = await request(app)
+      .get('/api/api-servers?organizationId=RIO')
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(rioResponse.body.length).toBe(1);
+    expect(rioResponse.body[0].organizationId).toBe('RIO');
+  });
+});
+
+// Test 11: External Organization API Server Constraints
+describe('Security: External Organization API Server Constraints', () => {
+  it('TEST-EXT-API-001: should allow create API server for external org', async () => {
+    // Valid: External orgs CAN have API servers (settings are writable)
+    const pemsOrg = await createOrganization({
+      code: 'PEMS_Global',
+      isExternal: true,
+      externalId: 'PEMS-ORG-789'
+    });
+
+    const response = await request(app)
+      .post('/api/api-servers')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        organizationId: pemsOrg.id,
+        name: 'Test',
+        baseUrl: 'https://api.test.com',
+        authType: 'bearer'
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.organizationId).toBe(pemsOrg.id);
+    expect(response.body.name).toBe('Test');
+  });
+
+  it('TEST-EXT-API-002: should preserve API servers during PEMS sync', async () => {
+    // Setup: External org with enableSync=true and 2 API servers
+    const pemsOrg = await createOrganization({
+      code: 'PEMS_Global',
+      isExternal: true,
+      enableSync: true,
+      externalId: 'PEMS-ORG-789'
+    });
+
+    const server1 = await createApiServer({
+      organizationId: pemsOrg.id,
+      name: 'Server 1',
+      baseUrl: 'https://api1.test.com'
+    });
+
+    const server2 = await createApiServer({
+      organizationId: pemsOrg.id,
+      name: 'Server 2',
+      baseUrl: 'https://api2.test.com'
+    });
+
+    // Action: Simulate PEMS sync (updates org settings)
+    await mockPemsSync({
+      organizations: [{
+        id: 'PEMS-ORG-789',
+        name: 'PEMS Global Updated', // Org name changed
+        code: 'PEMS_Global'
+      }]
+    });
+
+    // Verify: API server configs remain unchanged
+    const servers = await prisma.apiServer.findMany({
+      where: { organizationId: pemsOrg.id }
+    });
+
+    expect(servers.length).toBe(2);
+    expect(servers.find(s => s.id === server1.id).baseUrl).toBe('https://api1.test.com');
+    expect(servers.find(s => s.id === server2.id).baseUrl).toBe('https://api2.test.com');
+  });
+
+  it('TEST-EXT-API-003: should preserve API servers when unlinking external org', async () => {
+    // Setup: External org with 3 API servers
+    const pemsOrg = await createOrganization({
+      code: 'HOLNG',
+      isExternal: true,
+      externalId: 'PEMS-ORG-123'
+    });
+
+    await Promise.all([1, 2, 3].map(i =>
+      createApiServer({
+        organizationId: pemsOrg.id,
+        name: `Server ${i}`
+      })
+    ));
+
+    // Action: Unlink organization (convert to local)
+    const unlinkResponse = await request(app)
+      .post(`/api/organizations/${pemsOrg.id}/unlink`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ confirmationToken: 'valid-token' });
+
+    expect(unlinkResponse.status).toBe(200);
+
+    // Verify: Organization becomes local, API servers remain intact
+    const updatedOrg = await prisma.organization.findUnique({
+      where: { id: pemsOrg.id }
+    });
+    expect(updatedOrg.isExternal).toBe(false);
+
+    const servers = await prisma.apiServer.findMany({
+      where: { organizationId: pemsOrg.id }
+    });
+    expect(servers.length).toBe(3);
+  });
+});
+
+// Test 12: API Server Edge Cases
+describe('Security: API Server Edge Cases', () => {
+  it('EDGE-API-001: should reject API server without organizationId', async () => {
+    // Attack: Attempt to create API server with null/invalid organizationId
+    const response = await request(app)
+      .post('/api/api-servers')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Test Server',
+        baseUrl: 'https://api.test.com',
+        authType: 'bearer'
+        // Missing organizationId
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('organizationId is required');
+  });
+
+  it('EDGE-API-002: should recheck permission on submit after revoke', async () => {
+    // Scenario: User opens Edit Server modal, admin revokes perm_ManageSettings, user submits
+    const user = await createUser({
+      username: 'bob',
+      organizationIds: ['HOLNG'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    const server = await createApiServer({
+      organizationId: 'HOLNG',
+      name: 'Original Name'
+    });
+
+    // User loads edit modal (permission check passes)
+    const loadResponse = await request(app)
+      .get(`/api/api-servers/${server.id}`)
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(loadResponse.status).toBe(200);
+
+    // Admin revokes permission mid-session
+    await updateUserPermissions(adminToken, user.id, {
+      capabilities: { perm_ManageSettings: false }
+    });
+
+    // User submits edit form (permission re-checked)
+    const updateResponse = await request(app)
+      .patch(`/api/api-servers/${server.id}`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ name: 'Hacked Name' });
+
+    expect(updateResponse.status).toBe(403);
+    expect(updateResponse.body.error).toBe('Requires perm_ManageSettings permission');
+
+    // Verify server name NOT changed
+    const verifyServer = await prisma.apiServer.findUnique({
+      where: { id: server.id }
+    });
+    expect(verifyServer.name).toBe('Original Name');
+  });
+
+  it('EDGE-API-003: should complete test if org suspended mid-test', async () => {
+    // Scenario: User initiates API server test, admin suspends org mid-test
+    const org = await createOrganization({
+      code: 'HOLNG',
+      serviceStatus: 'active'
+    });
+
+    const server = await createApiServer({
+      organizationId: org.id,
+      name: 'HOLNG Server',
+      baseUrl: 'https://api.test.com'
+    });
+
+    // User initiates test (long-running operation)
+    const testPromise = request(app)
+      .post(`/api/api-servers/${server.id}/test`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    // Admin suspends org mid-test
+    await updateOrganization(adminToken, org.id, {
+      serviceStatus: 'suspended'
+    });
+
+    // Verify: Test completes (already in progress)
+    const testResponse = await testPromise;
+    expect(testResponse.status).toBe(200);
+
+    // Verify: Next test fails
+    const nextTestResponse = await request(app)
+      .post(`/api/api-servers/${server.id}/test`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(nextTestResponse.status).toBe(403);
+    expect(nextTestResponse.body.error).toBe('Cannot test - Organization is suspended');
+  });
+
+  it('EDGE-API-004: should show access error if user removed from org', async () => {
+    // Scenario: User has API Connectivity page open, admin removes them from org
+    const user = await createUser({
+      username: 'alice',
+      organizationIds: ['HOLNG'],
+      capabilities: { perm_ManageSettings: true }
+    });
+
+    const server = await createApiServer({
+      organizationId: 'HOLNG',
+      name: 'HOLNG Server'
+    });
+
+    // User loads API Connectivity page
+    const loadResponse = await request(app)
+      .get('/api/api-servers?organizationId=HOLNG')
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(loadResponse.status).toBe(200);
+
+    // Admin removes user from organization
+    await updateUserOrganizations(adminToken, user.id, {
+      organizationIds: [] // Removed from all orgs
+    });
+
+    // User clicks "Edit Server" (next API call)
+    const editResponse = await request(app)
+      .get(`/api/api-servers/${server.id}`)
+      .set('Authorization', `Bearer ${user.token}`);
+
+    expect(editResponse.status).toBe(403);
+    expect(editResponse.body.error).toBe('You no longer have access to this organization');
+  });
+});
 ```
 
 ---
@@ -276,6 +871,10 @@ describe('Security: External Entity Protection', () => {
 | User Login | <200ms | 100 | 100 req/s |
 | Load User List (100 users) | <500ms | 50 | 100 req/s |
 | Org Health Dashboard | <1000ms | 20 | 20 req/s |
+| **API Server Permission Check** | **<50ms** | **100** | **1000 req/s** |
+| **API Server List Query (filtered by org)** | **<200ms** | **50** | **100 req/s** |
+| **Organization Status Validation** | **<100ms** | **100** | **500 req/s** |
+| **Cascading Delete (org + 10 servers)** | **<500ms** | **10** | **20 req/s** |
 
 ### Load Test Scenarios
 
@@ -1210,15 +1809,15 @@ describe('Use Case 21: Boardroom Voice Analyst', () => {
 **Next Action**: Implement test suites during Phase 6 (Testing & Documentation)
 
 **Document Statistics**:
-- **Test Suites**: 25+ comprehensive test suites covering all AI use cases
-- **Test Scenarios**: 150+ individual test cases
-  - Security tests: 30+ (authentication, authorization, SQL injection, rate limiting, financial masking bypass)
+- **Test Suites**: 30+ comprehensive test suites covering all AI use cases and API Server Management
+- **Test Scenarios**: 171+ individual test cases
+  - Security tests: 51+ (authentication, authorization, SQL injection, rate limiting, financial masking bypass, **API server management**, **org status cascading**, **multi-tenant isolation**, **external org constraints**, **edge cases**)
   - Load tests: 20+ (concurrent operations, connection pools, memory leak detection)
   - AI accuracy tests: 40+ (permission explanation, financial masking, semantic search, role drift, BEO analytics)
   - Integration tests: 35+ (critical path tests, data integrity, transaction rollback)
   - UX tests: 25+ (notification timing, voice input, scenario wizards)
 - **Coverage Requirements**: >80% backend, >70% frontend, 100% critical paths
-- **Performance Benchmarks**: Defined for all 25 use cases (<50ms-<3s based on operation type)
+- **Performance Benchmarks**: Defined for all 25 AI use cases + API server operations (<50ms-<3s based on operation type)
 
 *Document created: 2025-11-26*
 *Last updated: 2025-11-26*

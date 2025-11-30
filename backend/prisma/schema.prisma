@@ -1,591 +1,1391 @@
-// Prisma Schema for PFA Vanguard Backend
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // PostgreSQL for production (required for JSONB, generated columns, materialized views)
-  // For development: Use Docker PostgreSQL or SQLite (limited features)
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// ============================================================================
-// User Management
-// ============================================================================
-
-model User {
-  id                    String   @id @default(uuid())
-  username              String   @unique
-  email                 String?  @unique
-  passwordHash          String
-  firstName             String?
-  lastName              String?
-  avatarUrl             String?  // Profile picture URL
-  role                  String   @default("user") // admin, user, viewer
-  isActive              Boolean  @default(true)
-
-  // Organization relationships
-  organizations         UserOrganization[]
-
-  // AI Usage tracking
-  aiUsageLogs           AiUsageLog[]
-
-  // PFA Modifications (Mirror + Delta)
-  pfaModifications      PfaModification[]
-  pfaSyncLogs           PfaSyncLog[]
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@map("users")
+model ai_providers {
+  id                   String    @id
+  type                 String
+  name                 String
+  enabled              Boolean   @default(true)
+  apiKeyEncrypted      String?
+  apiEndpoint          String?
+  defaultModel         String
+  availableModels      String
+  pricingInput         Float     @default(0)
+  pricingOutput        Float     @default(0)
+  pricingCached        Float?
+  maxTokensPerRequest  Int       @default(8192)
+  maxRequestsPerMinute Int       @default(60)
+  retryAttempts        Int       @default(3)
+  retryDelayMs         Int       @default(1000)
+  timeoutMs            Int       @default(30000)
+  status               String    @default("untested")
+  lastHealthCheck      DateTime?
+  errorRate            Float?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime
 }
 
-model Organization {
-  id                    String   @id @default(uuid())
-  code                  String   @unique
-  name                  String
-  description           String?
-  logoUrl               String?  // Organization logo URL
-  isActive              Boolean  @default(true)
-
-  // User relationships
-  users                 UserOrganization[]
-
-  // AI Configuration
-  aiConfig              OrganizationAiConfig?
-
-  // API Configurations
-  apiConfigs            ApiConfiguration[]              // Legacy org-specific configs
-  apiCredentials        OrganizationApiCredentials[]    // Credentials for global API configs
-
-  // Field Configurations
-  fieldConfigurations   FieldConfiguration[]
-
-  // PFA Data (Legacy - to be migrated to PfaMirror)
-  pfaRecords            PfaRecord[]
-
-  // PFA Mirror + Delta Architecture
-  pfaMirrors            PfaMirror[] @relation("PfaMirrorToOrganization")
-  pfaModifications      PfaModification[] @relation("PfaModificationToOrganization")
-  pfaSyncLogs           PfaSyncLog[] @relation("PfaSyncLogToOrganization")
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@map("organizations")
-}
-
-model UserOrganization {
-  id             String       @id @default(uuid())
+model ai_query_logs {
+  id             String   @id
   userId         String
-  organizationId String
-  role           String       @default("member") // owner, admin, member, viewer
+  organizationId String?
+  query          String
+  queryType      String
+  responseFormat String   @default("conversational")
+  contextQueryId String?
+  userPersona    String?
+  response       String
+  confidence     Float    @default(0)
+  modelUsed      String
+  tokensUsed     Int      @default(0)
+  costUsd        Float    @default(0)
+  latencyMs      Int?
+  metadata       Json?
+  createdAt      DateTime @default(now())
 
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  createdAt      DateTime     @default(now())
-
-  @@unique([userId, organizationId])
-  @@map("user_organizations")
+  @@index([contextQueryId])
+  @@index([organizationId, queryType])
+  @@index([userId, createdAt])
 }
 
-// ============================================================================
-// AI Provider Configuration
-// ============================================================================
+model ai_suggestion_logs {
+  id                   String    @id
+  userId               String
+  targetUserId         String
+  organizationId       String
+  targetJobTitle       String?
+  targetDepartment     String?
+  targetRole           String?
+  similarUserCount     Int       @default(0)
+  suggestedPermissions Json
+  confidence           Float     @default(0)
+  reasoning            String?
+  securityWarnings     Json?
+  accepted             Boolean   @default(false)
+  acceptedAt           DateTime?
+  acceptedBy           String?
+  finalPermissions     Json?
+  modificationReason   String?
+  responseTimeMs       Int?
+  cached               Boolean   @default(false)
+  cacheKey             String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime
+  users                users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model AiProvider {
-  id                    String   @id @default(uuid())
-  type                  String   // gemini, openai, anthropic, azure-openai
-  name                  String
-  enabled               Boolean  @default(true)
-
-  // Authentication (encrypted)
-  apiKeyEncrypted       String?
-  apiEndpoint           String?
-
-  // Model Configuration
-  defaultModel          String
-  availableModels       String   // JSON string: ["model1", "model2"]
-
-  // Pricing (USD per 1M tokens)
-  pricingInput          Float    @default(0)
-  pricingOutput         Float    @default(0)
-  pricingCached         Float?
-
-  // Limits
-  maxTokensPerRequest   Int      @default(8192)
-  maxRequestsPerMinute  Int      @default(60)
-
-  // Retry Configuration
-  retryAttempts         Int      @default(3)
-  retryDelayMs          Int      @default(1000)
-  timeoutMs             Int      @default(30000)
-
-  // Health Status
-  status                String   @default("untested") // healthy, degraded, down, untested
-  lastHealthCheck       DateTime?
-  errorRate             Float?
-
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@map("ai_providers")
+  @@index([accepted, createdAt])
+  @@index([cacheKey])
+  @@index([organizationId, createdAt])
+  @@index([targetUserId])
+  @@index([userId, createdAt])
 }
 
-model OrganizationAiConfig {
-  id                    String       @id @default(uuid())
-  organizationId        String       @unique
-  enabled               Boolean      @default(true)
-  accessLevel           String       @default("full-access") // full-access, read-only, disabled
-
-  // Provider Selection
-  primaryProviderId     String?
-  fallbackProviderIds   String?      // JSON string: ["uuid1", "uuid2"]
-
-  // Smart Routing
-  routingRules          String?      // JSON string: {"simpleQueries": "uuid", "complexQueries": "uuid"}
-
-  // Budget Management
-  dailyLimitUsd         Float        @default(10.00)
-  monthlyLimitUsd       Float        @default(100.00)
-  alertThresholdPercent Int          @default(80)
-
-  // Context Configuration
-  maxContextRecords     Int          @default(50)
-  includeHistoricalData Boolean      @default(false)
-
-  // Caching
-  enableSemanticCache   Boolean      @default(true)
-  cacheExpirationHours  Int          @default(24)
-
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-
-  @@map("organization_ai_configs")
-}
-
-model AiUsageLog {
-  id                    String   @id @default(uuid())
-  userId                String
-  organizationId        String
-
-  provider              String
-  model                 String
-
-  promptTokens          Int
-  completionTokens      Int
-  totalTokens           Int
-  costUsd               Float
-
-  latencyMs             Int?
-  cached                Boolean  @default(false)
-  success               Boolean  @default(true)
-  errorMessage          String?
-
-  queryHash             String?  // SHA-256 for deduplication
-
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt             DateTime @default(now())
+model ai_usage_logs {
+  id               String   @id
+  userId           String
+  organizationId   String
+  provider         String
+  model            String
+  promptTokens     Int
+  completionTokens Int
+  totalTokens      Int
+  costUsd          Float
+  latencyMs        Int?
+  cached           Boolean  @default(false)
+  success          Boolean  @default(true)
+  errorMessage     String?
+  queryHash        String?
+  createdAt        DateTime @default(now())
+  users            users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
-  @@index([userId, createdAt])
   @@index([queryHash])
-  @@map("ai_usage_logs")
+  @@index([userId, createdAt])
 }
 
-// ============================================================================
-// API Configuration (PEMS & External APIs)
-// ============================================================================
-
-model ApiConfiguration {
-  id                    String       @id @default(uuid())
-  organizationId        String?      // NULL = global/system-wide config (PEMS, AI templates)
-
-  name                  String
-  usage                 String       // PEMS_PFA, PEMS_ASSETS, AI_GEMINI, etc.
-
-  // Endpoint Configuration
-  url                   String
-  authType              String       // none, basic, bearer, apiKey
-  authKeyEncrypted      String?      // Encrypted credentials (for system-wide configs)
-  authValueEncrypted    String?      // Encrypted credentials (for system-wide configs)
-
-  // Additional Headers
-  customHeaders         String?      // JSON string: [{"key": "x", "value": "y"}]
-
-  // Read/Write Separation
-  operationType         String       @default("read") // read, write, read-write
-
-  // Data Feeds
-  feeds                 String?      // JSON string: [{"category": "pfa", "frequency": "daily"}]
-
-  // Sync Tracking (for APIs with feeds configured)
-  firstSyncAt           DateTime?    // Date of first successful data sync
-  lastSyncAt            DateTime?    // Date of most recent data sync
-  lastSyncRecordCount   Int?         // Records synced in last operation
-  totalSyncRecordCount  Int?         // Lifetime total records synced
-
-  // Status (for global configs only)
-  status                String       @default("untested") // connected, error, untested
-  lastChecked           DateTime?
-  lastError             String?
-
-  // Relationships
-  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  orgCredentials        OrganizationApiCredentials[] // Org-specific credentials for this global config
-  dataSourceMappings    DataSourceMapping[] // Data entity mappings for this API
-
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+model api_configurations {
+  id                           String                         @id
+  organizationId               String?
+  name                         String
+  usage                        String
+  url                          String
+  authType                     String
+  authKeyEncrypted             String?
+  authValueEncrypted           String?
+  customHeaders                String?
+  operationType                String                         @default("read")
+  feeds                        String?
+  status                       String                         @default("untested")
+  lastChecked                  DateTime?
+  lastError                    String?
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime
+  firstSyncAt                  DateTime?
+  lastSyncAt                   DateTime?
+  lastSyncRecordCount          Int?
+  totalSyncRecordCount         Int?
+  organizations                organizations?                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization_api_credentials organization_api_credentials[]
 
   @@index([organizationId, usage])
-  @@map("api_configurations")
 }
 
-// Organization-specific credentials for global API configurations
-// Allows multiple orgs to use same API provider with different credentials
-model OrganizationApiCredentials {
-  id                    String       @id @default(uuid())
-  organizationId        String
-  apiConfigurationId    String
+model api_endpoints {
+  id                        String                  @id
+  serverId                  String
+  name                      String
+  path                      String
+  description               String?
+  entity                    String
+  operationType             String                  @default("read")
+  status                    String                  @default("untested")
+  firstTestedAt             DateTime?
+  lastTestedAt              DateTime?
+  testCount                 Int                     @default(0)
+  successCount              Int                     @default(0)
+  failureCount              Int                     @default(0)
+  avgResponseTimeMs         Int?
+  lastKnownGoodAt           DateTime?
+  lastErrorMessage          String?
+  lastErrorAt               DateTime?
+  lastStatusCode            Int?
+  customHeaders             String?
+  timeoutMs                 Int                     @default(30000)
+  retryAttempts             Int                     @default(3)
+  isActive                  Boolean                 @default(true)
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime
+  targetModel               String?
+  defaultParams             Json                    @default("{}")
+  supportsDelta             Boolean                 @default(true)
+  deltaField                String?
+  deltaStrategy             String                  @default("timestamp")
+  promotionRules            Json                    @default("[]")
+  lastSyncAt                DateTime?
+  avgLatency                Int?
+  errorRate                 Float?
+  firstUsedAt               DateTime?
+  lastUsedAt                DateTime?
+  lastUsedRecordCount       Int?
+  totalRecordsSinceFirstUse Int                     @default(0)
+  refreshFrequencyMinutes   Int?
+  lastRefreshAt             DateTime?
+  nextScheduledRefreshAt    DateTime?
+  autoRefreshEnabled        Boolean                 @default(false)
+  api_servers               api_servers             @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  endpoint_test_results     endpoint_test_results[]
 
-  // Org-specific encrypted credentials
-  authKeyEncrypted      String?      // username for basic auth, or API key
-  authValueEncrypted    String?      // password for basic auth
-  customHeaders         String?      // JSON string: org-specific headers
+  @@unique([serverId, path])
+  @@index([autoRefreshEnabled, nextScheduledRefreshAt])
+  @@index([entity, operationType])
+  @@index([serverId])
+  @@index([serverId, status])
+}
 
-  // Org-specific status
-  status                String       @default("untested") // connected, error, untested
-  lastChecked           DateTime?
-  lastError             String?
+model api_field_mappings {
+  id               String    @id
+  endpointId       String
+  sourceField      String
+  destinationField String
+  dataType         String    @default("string")
+  transformType    String?   @default("direct")
+  transformParams  Json?     @default("{}")
+  defaultValue     String?
+  validFrom        DateTime  @default(now())
+  validTo          DateTime?
+  isActive         Boolean   @default(true)
+  avgTransformTime Int       @default(0)
+  errorCount       Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime
+  createdBy        String
 
-  // Relationships
-  organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  apiConfiguration      ApiConfiguration @relation(fields: [apiConfigurationId], references: [id], onDelete: Cascade)
+  @@unique([endpointId, sourceField, destinationField])
+  @@index([endpointId, isActive])
+  @@index([validFrom, validTo])
+}
 
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+model api_servers {
+  id                 String          @id
+  organizationId     String
+  name               String
+  baseUrl            String
+  description        String?
+  authType           String          @default("basic")
+  authKeyEncrypted   String?
+  authValueEncrypted String?
+  commonHeaders      String?
+  healthStatus       String          @default("untested")
+  healthScore        Int             @default(0)
+  lastHealthCheckAt  DateTime?
+  totalEndpoints     Int             @default(0)
+  healthyEndpoints   Int             @default(0)
+  degradedEndpoints  Int             @default(0)
+  downEndpoints      Int             @default(0)
+  status             String          @default("active")
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime
+  api_endpoints      api_endpoints[]
+  organizations      organizations   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId, healthStatus])
+  @@index([organizationId])
+}
+
+model arbitrage_opportunities {
+  id                String    @id
+  sourceOrgId       String
+  destOrgId         String
+  equipmentCategory String
+  equipmentClass    String?
+  idleStart         DateTime
+  idleEnd           DateTime
+  idleDays          Int
+  needStart         DateTime
+  needEnd           DateTime
+  needDays          Int
+  overlapStart      DateTime
+  overlapEnd        DateTime
+  overlapDays       Int
+  potentialSavings  Float
+  transferCost      Float     @default(0)
+  netSavings        Float
+  isFeasible        Boolean   @default(true)
+  distance          Float?
+  logisticsNotes    String?
+  status            String    @default("detected")
+  actionedAt        DateTime?
+  actionedBy        String?
+  detectedAt        DateTime  @default(now())
+
+  @@index([detectedAt])
+  @@index([isFeasible, status])
+  @@index([sourceOrgId, destOrgId, status])
+}
+
+model audit_logs {
+  id             String   @id
+  userId         String
+  organizationId String?
+  action         String
+  resource       String?
+  method         String?
+  metadata       Json?
+  success        Boolean  @default(false)
+  errorMessage   String?
+  timestamp      DateTime @default(now())
+
+  @@index([action, timestamp])
+  @@index([organizationId, timestamp])
+  @@index([userId, action, success])
+  @@index([userId, timestamp])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model bronze_batches {
+  id                 String           @id
+  syncBatchId        String           @unique
+  organizationId     String
+  endpointId         String
+  entityType         String
+  ingestedAt         DateTime         @default(now())
+  completedAt        DateTime?
+  recordCount        Int              @default(0)
+  validRecordCount   Int              @default(0)
+  invalidRecordCount Int              @default(0)
+  schemaFingerprint  Json?
+  warnings           Json             @default("[]")
+  errors             Json             @default("[]")
+  syncType           String           @default("full")
+  deltaFromBatchId   String?
+  metadata           Json?
+  bronze_records     bronze_records[]
+
+  @@index([endpointId, ingestedAt])
+  @@index([organizationId, ingestedAt])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model bronze_records {
+  id             String         @id
+  syncBatchId    String
+  organizationId String
+  entityType     String
+  ingestedAt     DateTime       @default(now())
+  rawJson        Json
+  schemaVersion  String?
+  bronze_batches bronze_batches @relation(fields: [syncBatchId], references: [syncBatchId])
+  data_lineage   data_lineage[]
+
+  @@index([organizationId, entityType])
+  @@index([organizationId, ingestedAt])
+  @@index([syncBatchId])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model data_lineage {
+  id             String         @id
+  silverRecordId String         @unique
+  silverModel    String
+  bronzeRecordId String
+  mappingRules   Json
+  transformedAt  DateTime       @default(now())
+  transformedBy  String
+  bronze_records bronze_records @relation(fields: [bronzeRecordId], references: [id])
+  pfa_records    pfa_records    @relation(fields: [silverRecordId], references: [id])
+
+  @@index([bronzeRecordId])
+  @@index([silverRecordId])
+}
+
+model endpoint_test_results {
+  id              String        @id
+  endpointId      String
+  testTimestamp   DateTime      @default(now())
+  success         Boolean
+  responseTimeMs  Int?
+  statusCode      Int?
+  errorType       String?
+  errorMessage    String?
+  requestUrl      String?
+  requestMethod   String        @default("GET")
+  requestHeaders  String?
+  requestPayload  String?
+  responseHeaders String?
+  responseSample  String?
+  contextData     String?
+  triggeredBy     String?
+  testType        String        @default("manual")
+  api_endpoints   api_endpoints @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, success])
+  @@index([endpointId, testTimestamp])
+  @@index([testTimestamp])
+}
+
+model field_configurations {
+  id             String         @id
+  organizationId String?
+  name           String
+  description    String?
+  isDefault      Boolean        @default(false)
+  fieldMappings  String
+  includeHeaders Boolean        @default(true)
+  dateFormat     String         @default("YYYY-MM-DD")
+  delimiter      String         @default(",")
+  encoding       String         @default("UTF-8")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  organizations  organizations? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model kpi_definitions {
+  id                 String               @id
+  organizationId     String
+  name               String
+  description        String?
+  formula            String
+  formulaType        String               @default("mathjs")
+  format             String               @default("number")
+  colorScale         Boolean              @default(false)
+  sortOrder          Int                  @default(0)
+  executionCount     Int                  @default(0)
+  avgExecutionTime   Int?
+  lastExecutedAt     DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+  createdBy          String
+  isActive           Boolean              @default(true)
+  kpi_execution_logs kpi_execution_logs[]
+
+  @@index([organizationId, isActive])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model kpi_execution_logs {
+  id               String          @id
+  kpiId            String
+  userId           String
+  organizationId   String
+  executedAt       DateTime        @default(now())
+  inputRecordCount Int
+  inputSample      Json
+  outputValue      Float
+  executionTime    Int
+  userRating       Int?
+  kpi_definitions  kpi_definitions @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  @@index([kpiId, executedAt])
+  @@index([organizationId, executedAt])
+}
+
+model narrative_reports {
+  id                String        @id
+  narrativeId       String        @unique
+  organizationId    String
+  userId            String
+  title             String
+  chapters          Json
+  keyTakeaways      Json
+  timeline          Json
+  recommendations   Json
+  estimatedReadTime Int
+  readingProgress   Json?
+  generatedAt       DateTime      @default(now())
+  updatedAt         DateTime
+  organizations     organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users             users         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, generatedAt])
+  @@index([userId, generatedAt])
+}
+
+model notification_engagement_logs {
+  id               String    @id
+  userId           String
+  notificationId   String
+  sentAt           DateTime
+  engagedAt        DateTime?
+  hourOfDay        Int
+  dayOfWeek        Int
+  engagementType   String?
+  responseTimeMs   Int?
+  channel          String
+  notificationType String
+  urgency          String
+  createdAt        DateTime  @default(now())
+
+  @@index([userId, channel, engagementType])
+  @@index([userId, dayOfWeek])
+  @@index([userId, hourOfDay])
+}
+
+model notification_preferences {
+  id                String    @id
+  userId            String    @unique
+  urgentChannel     String    @default("in_app")
+  routineChannel    String    @default("in_app")
+  quietModeEnabled  Boolean   @default(true)
+  quietHoursStart   String    @default("09:00")
+  quietHoursEnd     String    @default("12:00")
+  peakHoursStart    String    @default("14:00")
+  peakHoursEnd      String    @default("16:00")
+  enableDigest      Boolean   @default(true)
+  digestFrequency   String    @default("daily")
+  digestTime        String    @default("14:00")
+  aiLearningEnabled Boolean   @default(true)
+  aiConfidence      Float     @default(0)
+  lastAnalyzedAt    DateTime?
+  overrideUntil     DateTime?
+  overrideReason    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime
+}
+
+model notifications {
+  id               String    @id
+  userId           String
+  organizationId   String?
+  type             String
+  title            String
+  message          String
+  urgency          String    @default("routine")
+  channel          String    @default("in_app")
+  scheduledFor     DateTime?
+  deferredFrom     DateTime?
+  deferReason      String?
+  status           String    @default("pending")
+  sentAt           DateTime?
+  readAt           DateTime?
+  dismissedAt      DateTime?
+  engagementTimeMs Int?
+  engagementAction String?
+  metadata         Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime
+
+  @@index([organizationId, type])
+  @@index([userId, channel, status])
+  @@index([userId, sentAt])
+  @@index([userId, status])
+}
+
+model organization_ai_configs {
+  id                    String        @id
+  organizationId        String        @unique
+  enabled               Boolean       @default(true)
+  accessLevel           String        @default("full-access")
+  primaryProviderId     String?
+  fallbackProviderIds   String?
+  routingRules          String?
+  dailyLimitUsd         Float         @default(10.00)
+  monthlyLimitUsd       Float         @default(100.00)
+  alertThresholdPercent Int           @default(80)
+  maxContextRecords     Int           @default(50)
+  includeHistoricalData Boolean       @default(false)
+  enableSemanticCache   Boolean       @default(true)
+  cacheExpirationHours  Int           @default(24)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime
+  organizations         organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model organization_api_credentials {
+  id                 String             @id
+  organizationId     String
+  apiConfigurationId String
+  authKeyEncrypted   String?
+  authValueEncrypted String?
+  customHeaders      String?
+  status             String             @default("untested")
+  lastChecked        DateTime?
+  lastError          String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime
+  api_configurations api_configurations @relation(fields: [apiConfigurationId], references: [id], onDelete: Cascade)
+  organizations      organizations      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, apiConfigurationId])
-  @@index([organizationId])
   @@index([apiConfigurationId])
-  @@map("organization_api_credentials")
+  @@index([organizationId])
 }
 
-// Data Source Mapping (Configurable API-to-Entity mapping)
-// Maps data entities to API configurations with priority and performance tracking
-model DataSourceMapping {
-  id              String   @id @default(uuid())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Entity Definition
-  entityType      String   // 'pfa', 'organizations', 'asset_master', 'classifications'
-  organizationId  String?  // null = global, set = org-specific override
-
-  // API Configuration Reference
-  apiConfigId     String
-  apiConfig       ApiConfiguration @relation(fields: [apiConfigId], references: [id], onDelete: Cascade)
-
-  // Priority & Status
-  priority        Int      @default(1)  // 1 = primary, 2+ = fallbacks
-  isActive        Boolean  @default(true)
-
-  // Performance Tracking
-  lastUsedAt      DateTime?
-  lastSuccessAt   DateTime?
-  lastFailureAt   DateTime?
-  successCount    Int      @default(0)
-  failureCount    Int      @default(0)
-  avgResponseTime Int?     // milliseconds
-
-  // Unique constraint: one active mapping per entity per org per priority
-  @@unique([entityType, organizationId, priority])
-  @@index([entityType, isActive, priority])
-  @@index([apiConfigId])
-  @@map("data_source_mappings")
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model organizations {
+  id                           String                         @id
+  code                         String                         @unique
+  name                         String
+  description                  String?
+  isActive                     Boolean                        @default(true)
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime
+  logoUrl                      String?
+  isExternal                   Boolean                        @default(false)
+  externalId                   String?
+  serviceStatus                String                         @default("active")
+  suspendedAt                  DateTime?
+  suspendedBy                  String?
+  enableSync                   Boolean                        @default(true)
+  location                     Json?
+  headerConfig                 Json                           @default("{\"showLogo\":true,\"showId\":true,\"showName\":false,\"showDescription\":false}")
+  // AI Feature Flags - Organization level (what features the org has access to)
+  ai_ChatAssistant             Boolean                        @default(false)
+  ai_VoiceMode                 Boolean                        @default(false)
+  ai_PermissionSuggestions     Boolean                        @default(false)
+  ai_PermissionExplanations    Boolean                        @default(false)
+  ai_RoleDriftDetection        Boolean                        @default(false)
+  ai_NaturalLanguageQueries    Boolean                        @default(false)
+  ai_AnomalyDetection          Boolean                        @default(false)
+  ai_FinancialMonitoring       Boolean                        @default(false)
+  ai_SemanticAuditSearch       Boolean                        @default(false)
+  ai_FinancialMasking          Boolean                        @default(false)
+  ai_VendorPricingWatchdog     Boolean                        @default(false)
+  ai_BeoVoiceAnalyst           Boolean                        @default(false)
+  ai_NarrativeVariance         Boolean                        @default(false)
+  ai_AssetArbitrage            Boolean                        @default(false)
+  ai_ScenarioSimulator         Boolean                        @default(false)
+  ai_SmartNotifications        Boolean                        @default(false)
+  // AI Access Configuration - Organization level defaults
+  aiAccessLevel                String                         @default("full-access")
+  aiRules                      Json                           @default("[]")
+  api_configurations           api_configurations[]
+  api_servers                  api_servers[]
+  field_configurations         field_configurations[]
+  narrative_reports            narrative_reports[]
+  organization_ai_configs      organization_ai_configs?
+  organization_api_credentials organization_api_credentials[]
+  pfa_mirror                   pfa_mirror[]
+  pfa_modification             pfa_modification[]
+  pfa_records                  pfa_records[]
+  pfa_sync_log                 pfa_sync_log[]
+  pfa_write_queue              pfa_write_queue[]
+  pfa_sync_conflict            pfa_sync_conflict[]
+  user_organizations           user_organizations[]
+  asset_master                 asset_master[]
+  master_area_silos            master_area_silos[]
 }
 
-// ============================================================================
-// PFA Data
-// ============================================================================
+/// Asset Master Data - Equipment registry synced from PEMS
+/// Composite unique key: organizationId + assetCode
+model asset_master {
+  id                      String    @id @default(uuid())
+  organizationId          String
+  assetCode               String    // "Asset" column - the equipment number/tag
+  class                   String?   // Equipment class code (e.g., "04", "57")
+  category                String?   // Equipment category code (e.g., "04150", "57000")
+  equipmentStatus         String?   // "In Use", "Available", "Withdrawn", etc.
+  alias                   String?   // Alternate asset identifier
+  description             String?   // Equipment description
+  department              String?   // Department code (e.g., "11100E", "57257E")
+  commissionDate          DateTime? // Date asset was commissioned
+  outOfService            Boolean   @default(false) // YES/NO converted to boolean
+  assignedTo              String?   // Assignment reference
+  owner                   String?   // Owner identifier (e.g., "BEO")
+  source                  String?   // "OWNED" or "THIRD PARTY"
+  serialNumber            String?   // Equipment serial number
+  altBillingDescription   String?   // Alternate billing description
+  onSiteDate              DateTime? // Date asset arrived on site
+  yearBuilt               Int?      // Year the equipment was built
+  xCoordinate             Float?    // GPS X coordinate
+  yCoordinate             Float?    // GPS Y coordinate
+  withdrawalDate          DateTime? // Date asset was withdrawn
+  vendor                  String?   // Vendor name
+  vendorAssetNumber       String?   // Vendor's asset identifier
+  purchaseOrder           String?   // Purchase order number
+  purchaseCostOrVendorRate Float?   // Purchase cost or vendor rate
+  purchaseOrderLineNo     String?   // Purchase order line number
+  model                   String?   // Equipment model
+  manufacturer            String?   // Equipment manufacturer
+  licensePlateNumber      String?   // Vehicle license plate (if applicable)
+  lastInventoryDate       DateTime? // Last physical inventory date
 
-model PfaRecord {
-  id                    String    @id
-  pfaId                 String
-  organizationId        String
+  // Sync tracking
+  syncBatchId             String?   // Bronze batch this record came from
+  lastSyncedAt            DateTime? // Last sync timestamp
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-  // Basic Info
-  areaSilo              String?
-  category              String?
-  forecastCategory      String?
-  class                 String?
+  // Relations
+  organization            organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // Source & DOR
-  source                String?   // Rental, Purchase
-  dor                   String?   // BEO, PROJECT
+  @@unique([organizationId, assetCode])
+  @@index([organizationId])
+  @@index([organizationId, equipmentStatus])
+  @@index([organizationId, category])
+  @@index([organizationId, manufacturer])
+  @@index([syncBatchId])
+}
 
-  // Status Flags
-  isActualized          Boolean   @default(false)
-  isDiscontinued        Boolean   @default(false)
-  isFundsTransferable   Boolean   @default(false)
+model personal_access_tokens {
+  id            String    @id
+  userId        String
+  name          String
+  tokenHash     String    @unique
+  scopes        Json
+  expiresAt     DateTime?
+  lastUsedAt    DateTime?
+  lastUsedIp    String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  revokedAt     DateTime?
+  revokedBy     String?
+  revokedReason String?
 
-  // Financial
-  monthlyRate           Float?
-  purchasePrice         Float?
+  @@index([tokenHash])
+  @@index([userId, isActive])
+}
 
-  // Equipment Details
-  manufacturer          String?
-  model                 String?
-
-  // Dates
-  originalStart         DateTime?
-  originalEnd           DateTime?
-  hasPlan               Boolean   @default(false)
-
-  forecastStart         DateTime?
-  forecastEnd           DateTime?
-
-  actualStart           DateTime?
-  actualEnd             DateTime?
-  hasActuals            Boolean   @default(false)
-
-  // References
-  contract              String?
-  equipment             String?
-
-  // Metadata
-  lastModified          DateTime?
-  lastModifiedBy        String?
-
-  // Change Tracking (for bi-directional sync with PEMS)
-  syncState             String    @default("pristine") // pristine, modified, pending_sync, sync_error
-  lastSyncedAt          DateTime? // When last pushed to PEMS
-  pemsVersion           String?   // PEMS lastModified timestamp (for conflict detection)
-  localVersion          Int       @default(1) // Increment on every local edit
-
-  // Modified Fields Tracking (for incremental sync)
-  modifiedFields        String?   // JSON array: ["forecastStart", "forecastEnd"]
-  modifiedBy            String?   // User ID who made local changes
-  modifiedAt            DateTime? // When local changes were made
-
-  // Sync Error Handling
-  syncErrorMessage      String?
-  syncRetryCount        Int       @default(0)
-
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+model pfa_mirror {
+  id                  String               @id
+  organizationId      String
+  data                Json
+  pfaId               String?
+  category            String?
+  class               String?
+  source              String?
+  dor                 String?
+  areaSilo            String?
+  manufacturer        String?
+  model               String?
+  monthlyRate         Float?
+  purchasePrice       Float?
+  forecastStart       DateTime?
+  forecastEnd         DateTime?
+  originalStart       DateTime?
+  originalEnd         DateTime?
+  actualStart         DateTime?
+  actualEnd           DateTime?
+  isActualized        Boolean?
+  isDiscontinued      Boolean?
+  isFundsTransferable Boolean?
+  hasPlan             Boolean?
+  hasActuals          Boolean?
+  pemsVersion         String?
+  lastSyncedAt        DateTime?
+  syncBatchId         String?
+  version             Int                  @default(1)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime
+  organizations       organizations        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pfa_modification    pfa_modification[]
+  pfa_mirror_history  pfa_mirror_history[]
 
   @@unique([organizationId, pfaId])
-  @@index([organizationId])
-  @@index([updatedAt])
-  @@index([organizationId, syncState]) // Fast query for pending changes
-  @@index([organizationId, modifiedAt]) // Recent changes for incremental sync
-  @@map("pfa_records")
-}
-
-// ============================================================================
-// Field Configuration (CSV Import/Export Mappings)
-// ============================================================================
-
-model FieldConfiguration {
-  id                    String       @id @default(uuid())
-  organizationId        String?      // NULL = global/system-wide config
-
-  // Configuration Name
-  name                  String       // e.g., "Standard PFA Export", "Asset Import Template"
-  description           String?
-  isDefault             Boolean      @default(false)
-
-  // Field Mappings (JSON)
-  // Example: [{"field": "pfaId", "label": "PFA ID", "enabled": true, "order": 1}, ...]
-  fieldMappings         String       // JSON string of field mapping configuration
-
-  // Export/Import Settings
-  includeHeaders        Boolean      @default(true)
-  dateFormat            String       @default("YYYY-MM-DD")
-  delimiter             String       @default(",")
-  encoding              String       @default("UTF-8")
-
-  // Relationships
-  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-
-  @@index([organizationId])
-  @@map("field_configurations")
-}
-
-// ============================================================================
-// Sync Management
-// ============================================================================
-
-model SyncLog {
-  id                    String   @id @default(uuid())
-  organizationId        String
-
-  syncType              String   // full, incremental, manual
-  status                String   // success, error, in_progress
-
-  recordsProcessed      Int      @default(0)
-  recordsInserted       Int      @default(0)
-  recordsUpdated        Int      @default(0)
-  recordsDeleted        Int      @default(0)
-
-  durationMs            Int?
-  errorMessage          String?
-
-  triggeredBy           String?  // user ID or 'system'
-
-  createdAt             DateTime @default(now())
-
-  @@index([organizationId, createdAt])
-  @@map("sync_logs")
-}
-
-// ============================================================================
-// PFA MIRROR + DELTA ARCHITECTURE (PostgreSQL Only)
-// ============================================================================
-
-// PFA Mirror: Read-only cached data from PEMS (1M+ records)
-// Uses JSONB with generated columns for fast indexing
-model PfaMirror {
-  id                    String    @id @default(uuid())
-  organizationId        String
-
-  // Core JSONB Storage (Full PFA record from PEMS)
-  data                  Json      // Prisma maps to JSONB in PostgreSQL
-
-  // Generated Columns (Extracted from JSONB for indexing)
-  // NOTE: These are defined in migration SQL as GENERATED ALWAYS STORED
-  // Prisma doesn't support generated columns syntax, so we mark as optional
-  pfaId                 String?
-  category              String?
-  class                 String?
-  source                String?
-  dor                   String?
-  areaSilo              String?
-  manufacturer          String?
-  model                 String?
-  monthlyRate           Float?
-  purchasePrice         Float?
-  forecastStart         DateTime?
-  forecastEnd           DateTime?
-  originalStart         DateTime?
-  originalEnd           DateTime?
-  actualStart           DateTime?
-  actualEnd             DateTime?
-  isActualized          Boolean?
-  isDiscontinued        Boolean?
-  isFundsTransferable   Boolean?
-  hasPlan               Boolean?
-  hasActuals            Boolean?
-
-  // Sync Tracking
-  pemsVersion           String?
-  lastSyncedAt          DateTime?
-  syncBatchId           String?
-
-  // Relationships
-  organization          Organization @relation("PfaMirrorToOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
-  modifications         PfaModification[]
-
-  // Row Metadata
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  @@unique([organizationId, pfaId], name: "pfa_mirror_org_pfa_unique")
-  @@index([organizationId])
   @@index([organizationId, category, source])
   @@index([organizationId, forecastStart, forecastEnd])
+  @@index([organizationId])
   @@index([syncBatchId, lastSyncedAt])
-  @@map("pfa_mirror")
 }
 
-// PFA Modification: User draft changes (delta storage)
-model PfaModification {
-  id                    String    @id @default(uuid())
-  mirrorId              String
-  organizationId        String
-  userId                String
-
-  // Delta Storage (Only changed fields)
-  delta                 Json      @default("{}")
-
-  // Session Management
-  sessionId             String?
-  syncState             String    @default("draft")  // draft, committed, syncing, synced, conflict
-
-  // Optimistic Locking
-  baseVersion           Int       @default(1)
-  currentVersion        Int       @default(1)
-
-  // Audit Trail
-  modifiedFields        Json?     // Array: ["forecastStart", "forecastEnd"]
-  changeReason          String?
-  committedAt           DateTime?
-
-  // Relationships
-  mirror                PfaMirror @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
-  organization          Organization @relation("PfaModificationToOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Row Metadata
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+model pfa_modification {
+  id             String              @id
+  mirrorId       String
+  organizationId String
+  userId         String
+  delta          Json                @default("{}")
+  sessionId      String?
+  syncState      String              @default("draft")
+  baseVersion    Int                 @default(1)
+  currentVersion Int                 @default(1)
+  modifiedFields Json?
+  changeReason   String?
+  committedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime
+  syncStatus     String?             @default("draft")
+  syncedAt       DateTime?
+  syncError      String?
+  pemsVersion    Int?
+  pfa_mirror     pfa_mirror          @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
+  organizations  organizations       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          users               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  writeQueue     pfa_write_queue[]
+  conflicts      pfa_sync_conflict[]
 
   @@index([mirrorId, sessionId, syncState])
   @@index([organizationId, sessionId, syncState])
-  @@index([userId, sessionId, syncState])
   @@index([organizationId, syncState, committedAt])
+  @@index([userId, sessionId, syncState])
   @@map("pfa_modification")
 }
 
-// PFA Sync Log: Background worker tracking (enhanced version)
-model PfaSyncLog {
-  id                    String    @id @default(uuid())
-  organizationId        String
-  triggeredByUserId     String?
+model pfa_write_queue {
+  id             String           @id
+  modificationId String
+  pfaId          String
+  organizationId String
+  operation      String
+  payload        Json
+  status         String           @default("pending")
+  priority       Int              @default(0)
+  retryCount     Int              @default(0)
+  maxRetries     Int              @default(3)
+  lastAttemptAt  DateTime?
+  lastError      String?
+  scheduledAt    DateTime
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  modification   pfa_modification @relation(fields: [modificationId], references: [id], onDelete: Cascade)
+  organization   organizations    @relation(fields: [organizationId], references: [id])
 
-  // Sync Configuration
-  syncType              String    // full, incremental, manual
-  syncDirection         String    // read, write
-  batchId               String    @default(uuid())
+  @@index([status, scheduledAt])
+  @@index([organizationId])
+  @@index([pfaId])
+  @@index([modificationId])
+  @@map("pfa_write_queue")
+}
 
-  // Progress Tracking
-  status                String    @default("running")  // running, completed, failed, cancelled
-  recordsTotal          Int       @default(0)
-  recordsProcessed      Int       @default(0)
-  recordsInserted       Int       @default(0)
-  recordsUpdated        Int       @default(0)
-  recordsDeleted        Int       @default(0)
-  recordsSkipped        Int       @default(0)
-  recordsErrored        Int       @default(0)
+model pfa_sync_conflict {
+  id             String           @id
+  pfaId          String
+  organizationId String
+  modificationId String
+  localVersion   Int
+  pemsVersion    Int
+  localData      Json
+  pemsData       Json
+  conflictFields Json
+  status         String           @default("unresolved")
+  resolution     String?
+  mergedData     Json?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  modification   pfa_modification @relation(fields: [modificationId], references: [id], onDelete: Cascade)
+  organization   organizations    @relation(fields: [organizationId], references: [id])
 
-  // Timing
-  startedAt             DateTime  @default(now())
-  completedAt           DateTime?
-  durationMs            Int?
+  @@index([status])
+  @@index([organizationId])
+  @@index([pfaId])
+  @@index([modificationId])
+  @@map("pfa_sync_conflict")
+}
 
-  // Error Handling
-  errorMessage          String?
-  errorDetails          Json?
+model pfa_mirror_history {
+  id                  String     @id
+  mirrorId            String
+  version             Int
+  organizationId      String
+  data                Json
+  pfaId               String?
+  category            String?
+  class               String?
+  source              String?
+  dor                 String?
+  areaSilo            String?
+  manufacturer        String?
+  model               String?
+  monthlyRate         Float?
+  purchasePrice       Float?
+  forecastStart       DateTime?
+  forecastEnd         DateTime?
+  originalStart       DateTime?
+  originalEnd         DateTime?
+  actualStart         DateTime?
+  actualEnd           DateTime?
+  isActualized        Boolean?
+  isDiscontinued      Boolean?
+  isFundsTransferable Boolean?
+  hasPlan             Boolean?
+  hasActuals          Boolean?
+  pemsVersion         String?
+  syncBatchId         String?
+  changedBy           String?
+  changeReason        String?
+  archivedAt          DateTime   @default(now())
+  pfa_mirror          pfa_mirror @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
 
-  // Relationships
-  organization          Organization @relation("PfaSyncLogToOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
-  triggeredByUser       User?     @relation(fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  @@index([mirrorId, version(sort: Desc)])
+  @@index([organizationId])
+  @@index([mirrorId, archivedAt(sort: Desc)])
+}
 
-  @@index([organizationId, status, startedAt])
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model pfa_records {
+  id                  String        @id
+  pfaId               String
+  organizationId      String
+  areaSilo            String?
+  category            String?
+  forecastCategory    String?
+  class               String?
+  source              String?
+  dor                 String?
+  isActualized        Boolean       @default(false)
+  isDiscontinued      Boolean       @default(false)
+  isFundsTransferable Boolean       @default(false)
+  monthlyRate         Float?
+  purchasePrice       Float?
+  manufacturer        String?
+  model               String?
+  originalStart       DateTime?
+  originalEnd         DateTime?
+  hasPlan             Boolean       @default(false)
+  forecastStart       DateTime?
+  forecastEnd         DateTime?
+  actualStart         DateTime?
+  actualEnd           DateTime?
+  hasActuals          Boolean       @default(false)
+  contract            String?
+  equipment           String?
+  lastModified        DateTime?
+  lastModifiedBy      String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime
+  syncState           String        @default("pristine")
+  lastSyncedAt        DateTime?
+  pemsVersion         String?
+  localVersion        Int           @default(1)
+  modifiedFields      String?
+  modifiedBy          String?
+  modifiedAt          DateTime?
+  syncErrorMessage    String?
+  syncRetryCount      Int           @default(0)
+  vendorName          String?
+  lastSeenAt          DateTime      @default(now())
+  bronzeRecordId      String?
+  migrated_to_mirror  Boolean?      @default(false)
+  data_lineage        data_lineage?
+  organizations       organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, pfaId])
+  @@index([organizationId])
+  @@index([organizationId, lastSeenAt])
+  @@index([organizationId, modifiedAt])
+  @@index([organizationId, syncState])
+  @@index([updatedAt])
+  @@index([vendorName, category])
+}
+
+model pfa_sync_log {
+  id                String        @id
+  organizationId    String
+  triggeredByUserId String?
+  syncType          String
+  syncDirection     String
+  batchId           String
+  status            String        @default("running")
+  recordsTotal      Int           @default(0)
+  recordsProcessed  Int           @default(0)
+  recordsInserted   Int           @default(0)
+  recordsUpdated    Int           @default(0)
+  recordsDeleted    Int           @default(0)
+  recordsSkipped    Int           @default(0)
+  recordsErrored    Int           @default(0)
+  startedAt         DateTime      @default(now())
+  completedAt       DateTime?
+  durationMs        Int?
+  errorMessage      String?
+  errorDetails      Json?
+  organizations     organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users             users?        @relation(fields: [triggeredByUserId], references: [id])
+
   @@index([batchId])
+  @@index([organizationId, status, startedAt])
   @@index([triggeredByUserId, startedAt])
-  @@map("pfa_sync_log")
+}
+
+model pricing_anomalies {
+  id               String    @id
+  type             String
+  severity         String
+  vendorName       String
+  category         String
+  organizationId   String
+  currentRate      Float
+  marketRate       Float
+  deviationPercent Float
+  recommendation   String
+  status           String    @default("active")
+  detectedAt       DateTime  @default(now())
+  resolvedAt       DateTime?
+  resolvedBy       String?
+
+  @@index([organizationId, status])
+  @@index([status, detectedAt])
+  @@index([vendorName, status])
+}
+
+model role_templates {
+  id                        String   @id
+  name                      String   @unique
+  description               String?
+  isSystem                  Boolean  @default(false)
+  perm_Read                 Boolean  @default(true)
+  perm_EditForecast         Boolean  @default(false)
+  perm_EditActuals          Boolean  @default(false)
+  perm_Delete               Boolean  @default(false)
+  perm_Import               Boolean  @default(false)
+  perm_RefreshData          Boolean  @default(false)
+  perm_Export               Boolean  @default(false)
+  perm_ViewFinancials       Boolean  @default(false)
+  perm_SaveDraft            Boolean  @default(false)
+  perm_Sync                 Boolean  @default(false)
+  perm_ManageUsers          Boolean  @default(false)
+  perm_ManageSettings       Boolean  @default(false)
+  perm_ConfigureAlerts      Boolean  @default(false)
+  perm_Impersonate          Boolean  @default(false)
+  perm_UseAiFeatures        Boolean  @default(false)
+  perm_ViewAllOrgs          Boolean  @default(false) // CVE-2024-BEO-001 fix: BEO cross-org analytics access
+  // AI Feature Flags - Role template defaults
+  ai_ChatAssistant          Boolean  @default(false)
+  ai_VoiceMode              Boolean  @default(false)
+  ai_PermissionSuggestions  Boolean  @default(false)
+  ai_PermissionExplanations Boolean  @default(false)
+  ai_RoleDriftDetection     Boolean  @default(false)
+  ai_NaturalLanguageQueries Boolean  @default(false)
+  ai_AnomalyDetection       Boolean  @default(false)
+  ai_FinancialMonitoring    Boolean  @default(false)
+  ai_SemanticAuditSearch    Boolean  @default(false)
+  ai_FinancialMasking       Boolean  @default(false)
+  ai_VendorPricingWatchdog  Boolean  @default(false)
+  ai_BeoVoiceAnalyst        Boolean  @default(false)
+  ai_NarrativeVariance      Boolean  @default(false)
+  ai_AssetArbitrage         Boolean  @default(false)
+  ai_ScenarioSimulator      Boolean  @default(false)
+  ai_SmartNotifications     Boolean  @default(false)
+  // AI Access Configuration
+  aiAccessLevel             String   @default("full-access")
+  aiRules                   Json     @default("[]")
+  capabilities              Json     @default("{}")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime
+  createdBy                 String
+  usageCount                Int      @default(0)
+
+  @@index([isSystem])
+}
+
+model scenario_simulations {
+  id              String   @id
+  scenarioId      String   @unique
+  createdBy       String
+  organizationIds Json
+  scenarioType    String
+  parameters      Json
+  baselineMetrics Json
+  scenarioMetrics Json
+  impact          Json
+  riskAnalysis    Json?
+  timeline        Json
+  createdAt       DateTime @default(now())
+  users           users    @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([createdBy, createdAt])
+  @@index([scenarioType, createdAt])
+}
+
+model soft_deleted_items {
+  id                   String    @id
+  entityType           String
+  entityId             String
+  entityData           Json
+  deletedAt            DateTime  @default(now())
+  deletedBy            String
+  canRestore           Boolean   @default(true)
+  dependencies         Json?
+  restoredAt           DateTime?
+  restoredBy           String?
+  permanentlyDeletedAt DateTime?
+  permanentlyDeletedBy String?
+
+  @@index([canRestore])
+  @@index([deletedBy, deletedAt])
+  @@index([entityType, deletedAt])
+}
+
+model sync_logs {
+  id               String   @id
+  organizationId   String
+  syncType         String
+  status           String
+  recordsProcessed Int      @default(0)
+  recordsInserted  Int      @default(0)
+  recordsUpdated   Int      @default(0)
+  recordsDeleted   Int      @default(0)
+  durationMs       Int?
+  errorMessage     String?
+  triggeredBy      String?
+  createdAt        DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+}
+
+model system_dictionary_entries {
+  id        String   @id
+  category  String
+  value     String
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  createdBy String
+
+  @@unique([category, value])
+  @@index([category, isActive, sortOrder])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model transformation_metrics {
+  id               String   @id
+  mappingId        String
+  batchId          String
+  executedAt       DateTime @default(now())
+  recordsProcessed Int
+  totalLatency     Int
+  avgLatency       Float
+  errorCount       Int
+
+  @@index([batchId])
+  @@index([mappingId, executedAt])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_action_logs {
+  id             String   @id
+  userId         String
+  organizationId String
+  actionType     String
+  actionContext  Json
+  timestamp      DateTime @default(now())
+  userIntent     String?
+  wasSuccessful  Boolean  @default(true)
+  errorMessage   String?
+
+  @@index([organizationId, timestamp])
+  @@index([timestamp])
+  @@index([userId, actionType])
+}
+
+model user_organizations {
+  id                        String        @id
+  userId                    String
+  organizationId            String
+  role                      String        @default("member")
+  createdAt                 DateTime      @default(now())
+  assignmentSource          String        @default("local")
+  externalRoleId            String?
+  isCustom                  Boolean       @default(false)
+  perm_Read                 Boolean       @default(true)
+  perm_EditForecast         Boolean       @default(false)
+  perm_EditActuals          Boolean       @default(false)
+  perm_Delete               Boolean       @default(false)
+  perm_Import               Boolean       @default(false)
+  perm_RefreshData          Boolean       @default(false)
+  perm_Export               Boolean       @default(false)
+  perm_ViewFinancials       Boolean       @default(false)
+  perm_SaveDraft            Boolean       @default(false)
+  perm_Sync                 Boolean       @default(false)
+  perm_ManageUsers          Boolean       @default(false)
+  perm_ManageSettings       Boolean       @default(false)
+  perm_ConfigureAlerts      Boolean       @default(false)
+  perm_Impersonate          Boolean       @default(false)
+  perm_UseAiFeatures        Boolean       @default(false)
+  perm_ViewAllOrgs          Boolean       @default(false) // CVE-2024-BEO-001 fix: BEO cross-org analytics access
+  // AI Feature Flags - User-specific overrides (per org)
+  ai_ChatAssistant          Boolean       @default(false)
+  ai_VoiceMode              Boolean       @default(false)
+  ai_PermissionSuggestions  Boolean       @default(false)
+  ai_PermissionExplanations Boolean       @default(false)
+  ai_RoleDriftDetection     Boolean       @default(false)
+  ai_NaturalLanguageQueries Boolean       @default(false)
+  ai_AnomalyDetection       Boolean       @default(false)
+  ai_FinancialMonitoring    Boolean       @default(false)
+  ai_SemanticAuditSearch    Boolean       @default(false)
+  ai_FinancialMasking       Boolean       @default(false)
+  ai_VendorPricingWatchdog  Boolean       @default(false)
+  ai_BeoVoiceAnalyst        Boolean       @default(false)
+  ai_NarrativeVariance      Boolean       @default(false)
+  ai_AssetArbitrage         Boolean       @default(false)
+  ai_ScenarioSimulator      Boolean       @default(false)
+  ai_SmartNotifications     Boolean       @default(false)
+  // AI Access Configuration - User-level overrides
+  aiAccessLevel             String        @default("full-access")
+  aiRules                   Json          @default("[]")
+  grantedBy                 String?
+  grantedAt                 DateTime      @default(now())
+  modifiedBy                String?
+  modifiedAt                DateTime
+  organizations             organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users                     users         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model user_sessions {
+  id            String    @id
+  userId        String
+  sessionToken  String    @unique
+  deviceInfo    String?
+  browser       String?
+  ipAddress     String?
+  location      String?
+  lastActiveAt  DateTime  @default(now())
+  expiresAt     DateTime
+  isActive      Boolean   @default(true)
+  invalidatedAt DateTime?
+  invalidatedBy String?
+  createdAt     DateTime  @default(now())
+
+  @@index([sessionToken])
+  @@index([userId, isActive])
+  @@index([userId, lastActiveAt])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model users {
+  id                   String                 @id
+  username             String                 @unique
+  email                String?                @unique
+  passwordHash         String?
+  firstName            String?
+  lastName             String?
+  role                 String                 @default("user")
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  avatarUrl            String?
+  authProvider         String                 @default("local")
+  externalId           String?
+  serviceStatus        String                 @default("active")
+  suspendedAt          DateTime?
+  lockedAt             DateTime?
+  failedLoginCount     Int                    @default(0)
+  metadata             Json?
+  ai_suggestion_logs   ai_suggestion_logs[]
+  ai_usage_logs        ai_usage_logs[]
+  narrative_reports    narrative_reports[]
+  pfa_modification     pfa_modification[]
+  pfa_sync_log         pfa_sync_log[]
+  scenario_simulations scenario_simulations[]
+  user_organizations   user_organizations[]
+}
+
+model vendor_pricing_snapshots {
+  id              String   @id
+  vendorName      String
+  category        String
+  avgMonthlyRate  Float
+  equipmentCount  Int
+  organizationIds Json
+  snapshotDate    DateTime @default(now())
+
+  @@index([vendorName, category, snapshotDate])
+}
+
+model vendor_rate_history {
+  id              String    @id
+  organizationId  String
+  vendor          String
+  category        String
+  class           String?
+  monthlyRate     Float
+  effectiveDate   DateTime  @default(now())
+  endDate         DateTime?
+  marketAvgRate   Float?
+  variancePercent Float?
+  isAnomaly       Boolean   @default(false)
+  anomalyReason   String?
+  alertSent       Boolean   @default(false)
+  alertSentAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([effectiveDate])
+  @@index([isAnomaly, alertSent])
+  @@index([organizationId, vendor, category])
+}
+
+model webhook_configs {
+  id              String    @id
+  organizationId  String?
+  type            String
+  name            String
+  webhookUrl      String
+  channelName     String?
+  isActive        Boolean   @default(true)
+  eventTriggers   Json
+  lastTriggeredAt DateTime?
+  lastTestAt      DateTime?
+  lastTestSuccess Boolean?
+  lastTestError   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+  createdBy       String
+
+  @@index([organizationId, isActive])
+  @@index([type, isActive])
+}
+
+// =============================================================================
+// MASTER DATA TABLES - Reference Data for Dropdowns and Validation
+// =============================================================================
+
+/// Master Manufacturers - Equipment manufacturer reference data
+model master_manufacturers {
+  id          String   @id @default(uuid())
+  code        String   @unique // Manufacturer code/name (e.g., "FORD", "CATERPILLAR")
+  description String?  // Full description
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  models      master_models[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+/// Master Models - Equipment model reference data
+/// Composite key: manufacturer + model
+model master_models {
+  id             String   @id @default(uuid())
+  manufacturer   String   // FK to master_manufacturers.code
+  model          String   // Model code/name (e.g., "F-150", "D6T")
+  description    String?  // Full description
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  manufacturerRef master_manufacturers @relation(fields: [manufacturer], references: [code], onDelete: Cascade)
+
+  @@unique([manufacturer, model])
+  @@index([manufacturer])
+  @@index([model])
+  @@index([isActive])
+}
+
+/// Master DORs - Department of Record reference data
+model master_dors {
+  id          String   @id @default(uuid())
+  code        String   @unique // DOR code (e.g., "BEO", "PROJECT")
+  description String?  // Full description (e.g., "Base Engineering Operations")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+/// Master Sources - Equipment source/acquisition type reference data
+model master_sources {
+  id          String   @id @default(uuid())
+  code        String   @unique // Source code (e.g., "RENTAL", "PURCHASE", "LEASE")
+  description String?  // Full description
+  type        String?  // Category type (e.g., "Capex", "Opex")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+/// Master Class Categories - Equipment classification hierarchy
+/// Composite key: class + category
+model master_class_categories {
+  id                  String   @id @default(uuid())
+  classCode           String   // Class code (e.g., "02", "14")
+  classDescription    String?  // Class name (e.g., "Trucks - Light Duty")
+  categoryCode        String   // Category code (e.g., "02012", "14500")
+  categoryDescription String?  // Category name (e.g., "PICKUP COMPACT 4X4")
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([classCode, categoryCode])
+  @@index([classCode])
+  @@index([categoryCode])
+  @@index([isActive])
+}
+
+/// Master Area Silos - Organization-specific area/silo reference data
+/// Composite key: organizationId + areaSilo
+model master_area_silos {
+  id             String        @id @default(uuid())
+  organizationId String        // FK to organizations
+  areaSilo       String        // Area/Silo code (e.g., "SILO-1", "AREA-A", "NORTH-YARD")
+  description    String?       // Full description
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  organization   organizations @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, areaSilo])
+  @@index([organizationId])
+  @@index([areaSilo])
+  @@index([isActive])
+}
+
+/// Mapping Templates - Reusable field mapping configurations
+model mapping_templates {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  entity      String   // Target entity (e.g., "PFA", "Asset")
+  mappings    Json     // Array of FieldMapping objects
+  isPublic    Boolean  @default(false)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([entity])
+  @@index([isPublic])
 }

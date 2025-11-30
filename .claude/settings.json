@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "agents": {
+    "enabled": true,
+    "allowSubagentSpawning": true,
+    "maxConcurrentAgents": 3,
+    "agentDirectory": ".claude/agents"
+  },
+  "tools": {
+    "task": {
+      "enabled": true
+    },
+    "agent": {
+      "enabled": true
+    }
+  },
+  "permissions": {
+    "allowAgentDelegation": true,
+    "allowAgentCommunication": true
+  },
+  "workflow": {
+    "trackAgentStatus": true,
+    "logAgentActivity": true
+  }
+}

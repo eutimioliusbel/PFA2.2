@@ -4,39 +4,41 @@
  * Handles global API configs and org-specific credentials:
  * - PEMS APIs: Global system-wide configs (admin-only)
  * - AI Providers: Global templates, orgs add their own API keys
- * - OrganizationApiCredentials: Org-specific credentials for global configs
+ * - organization_api_credentials: Org-specific credentials for global configs
  */
 
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { encrypt, decrypt } from '../utils/encryption';
 import { logger } from '../utils/logger';
+import { handleControllerError } from '../utils/errorHandling';
 
 /**
  * GET /api/configs
  * Get global API configurations and org-specific credentials
  */
-export const getApiConfigs = async (req: Request, res: Response) => {
+export const getApiConfigs = async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.query;
 
     if (!organizationId || typeof organizationId !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
     // Get all global API configurations (organizationId = null)
-    const globalConfigs = await prisma.apiConfiguration.findMany({
+    const globalConfigs = await prisma.api_configurations.findMany({
       where: { organizationId: null },
       orderBy: { createdAt: 'desc' }
     });
 
     // Get org-specific credentials for these configs
-    const orgCredentials = await prisma.organizationApiCredentials.findMany({
+    const orgCredentials = await prisma.organization_api_credentials.findMany({
       where: { organizationId },
-      include: { apiConfiguration: true }
+      include: { api_configurations: true }
     });
 
     // Map org credentials by apiConfigurationId for quick lookup
@@ -199,7 +201,7 @@ export const getApiConfigs = async (req: Request, res: Response) => {
  * POST /api/configs/:id/credentials
  * Add or update org-specific credentials for a global API config
  */
-export const upsertOrgCredentials = async (req: Request, res: Response) => {
+export const upsertOrgCredentials = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params; // API configuration ID
     const {
@@ -212,29 +214,32 @@ export const upsertOrgCredentials = async (req: Request, res: Response) => {
 
     // Validate
     if (!organizationId) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
     // Verify the API config exists and is global
-    const apiConfig = await prisma.apiConfiguration.findUnique({
+    const apiConfig = await prisma.api_configurations.findUnique({
       where: { id }
     });
 
     if (!apiConfig) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'API configuration not found'
       });
+      return;
     }
 
     if (apiConfig.organizationId !== null) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_CONFIG',
         message: 'This is not a global API configuration'
       });
+      return;
     }
 
     // Encrypt credentials
@@ -255,7 +260,7 @@ export const upsertOrgCredentials = async (req: Request, res: Response) => {
     }
 
     // Upsert org credentials
-    const credentials = await prisma.organizationApiCredentials.upsert({
+    const credentials = await prisma.organization_api_credentials.upsert({
       where: {
         organizationId_apiConfigurationId: {
           organizationId,
@@ -266,7 +271,8 @@ export const upsertOrgCredentials = async (req: Request, res: Response) => {
         authKeyEncrypted,
         authValueEncrypted,
         customHeaders,
-        status: 'untested' // Reset status on credential update
+        status: 'untested', // Reset status on credential update
+        updatedAt: new Date()
       },
       create: {
         organizationId,
@@ -274,8 +280,10 @@ export const upsertOrgCredentials = async (req: Request, res: Response) => {
         authKeyEncrypted,
         authValueEncrypted,
         customHeaders,
-        status: 'untested'
-      }
+        status: 'untested',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as any
     });
 
     res.json({
@@ -299,19 +307,20 @@ export const upsertOrgCredentials = async (req: Request, res: Response) => {
  * DELETE /api/configs/:id/credentials
  * Remove org-specific credentials for a global API config
  */
-export const deleteOrgCredentials = async (req: Request, res: Response) => {
+export const deleteOrgCredentials = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { organizationId } = req.query;
 
     if (!organizationId || typeof organizationId !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
-    await prisma.organizationApiCredentials.deleteMany({
+    await prisma.organization_api_credentials.deleteMany({
       where: {
         organizationId,
         apiConfigurationId: id
@@ -332,34 +341,36 @@ export const deleteOrgCredentials = async (req: Request, res: Response) => {
  * POST /api/configs/:id/test
  * Test an API configuration connection using org's credentials
  */
-export const testApiConfig = async (req: Request, res: Response) => {
+export const testApiConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { organizationId } = req.body;
 
     if (!organizationId) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
     // Fetch global config
-    const config = await prisma.apiConfiguration.findUnique({
+    const config = await prisma.api_configurations.findUnique({
       where: { id }
     });
 
     if (!config) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'API configuration not found'
       });
+      return;
     }
 
     const isPEMS = config.usage.startsWith('PEMS_');
 
     // Fetch org credentials (only for AI, not PEMS)
-    const orgCred = !isPEMS ? await prisma.organizationApiCredentials.findUnique({
+    const orgCred = !isPEMS ? await prisma.organization_api_credentials.findUnique({
       where: {
         organizationId_apiConfigurationId: {
           organizationId,
@@ -381,10 +392,11 @@ export const testApiConfig = async (req: Request, res: Response) => {
       if (isPEMS) {
         // PEMS: Only use global credentials
         if (!config.authKeyEncrypted && !config.authValueEncrypted) {
-          return res.status(404).json({
+          res.status(404).json({
             error: 'NO_CREDENTIALS',
             message: 'No global credentials configured for this PEMS API'
           });
+          return;
         }
 
         if (config.authKeyEncrypted) {
@@ -457,18 +469,20 @@ export const testApiConfig = async (req: Request, res: Response) => {
           }
         } else {
           // No credentials at all
-          return res.status(404).json({
+          res.status(404).json({
             error: 'NO_CREDENTIALS',
             message: 'No credentials configured for this AI provider'
           });
+          return;
         }
       }
     } catch (error) {
       logger.error('Failed to decrypt credentials:', error);
-      return res.status(500).json({
+      res.status(500).json({
         error: 'ENCRYPTION_ERROR',
         message: 'Failed to decrypt stored credentials'
       });
+      return;
     }
 
     // Test connection based on type
@@ -492,6 +506,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
 
         let requestBody: any;
         let method = 'POST';
+        let testUrl = config.url; // Use separate variable for test URL
 
         // Different request formats for different PEMS APIs
         if (config.usage === 'PEMS_PFA_READ') {
@@ -513,10 +528,11 @@ export const testApiConfig = async (req: Request, res: Response) => {
 
           // Require at least gridCode or gridId to be configured
           if (!gridCode && !gridId) {
-            return res.status(400).json({
+            res.status(400).json({
               error: 'MISSING_CONFIGURATION',
               message: 'Grid Code or Grid ID must be configured for PFA Read API. Please set these values in the API configuration.'
             });
+            return;
           }
 
           requestBody = {
@@ -556,21 +572,45 @@ export const testApiConfig = async (req: Request, res: Response) => {
           // UserDefinedScreenService - write operations are too risky to test
           // We'll just validate authentication by checking if the service is reachable
           // For actual writes, use the real sync/import operations
-          return res.status(200).json({
+          res.status(200).json({
             success: true,
             message: 'Write API configuration saved. Test connection is not available for write operations to prevent accidental data modification. Use the actual sync operation to verify connectivity.',
             latencyMs: 0
           });
+          return;
 
-        } else if (config.usage === 'PEMS_ASSETS' || config.usage === 'PEMS_CLASSES' || config.usage === 'PEMS_ORGANIZATIONS') {
-          // REST API - just GET request with headers
+        } else if (config.usage === 'PEMS_ASSETS') {
+          // Assets API - GET request to fetch asset collection
+          method = 'GET';
+          requestBody = null; // GET requests have no body
+        } else if (config.usage === 'PEMS_CLASSES') {
+          // Categories API - GET request to fetch category collection
+          method = 'GET';
+          requestBody = null; // GET requests have no body
+        } else if (config.usage === 'PEMS_ORGANIZATIONS') {
+          // Organization API - GET request to fetch organization collection (singular form)
+          method = 'GET';
+          requestBody = null;
+        } else if (config.usage === 'PEMS_USER_SYNC') {
+          // UserSetup API - GET request to fetch user collection
+          method = 'GET';
+          const baseUrl = config.url.replace(/\/$/, ''); // Remove trailing slash
+          testUrl = `${baseUrl}/usersetup`; // Use collection endpoint
+          headers['organization'] = organization || 'RIO'; // Use org from DB or default
+          requestBody = null; // GET requests have no body
+        } else if (config.usage === 'PEMS_MANUFACTURERS') {
+          // Manufacturers API - GET request to fetch manufacturer collection
+          method = 'GET';
+          requestBody = null;
+        } else {
+          // Unknown PEMS API type - use GET with no body
           method = 'GET';
           requestBody = null;
         }
 
         // Log request details for debugging
         logger.info('Testing PEMS connection:', {
-          url: config.url,
+          url: testUrl,
           apiType: config.usage,
           method,
           username,
@@ -579,10 +619,10 @@ export const testApiConfig = async (req: Request, res: Response) => {
           requestBody: requestBody ? JSON.stringify(requestBody).substring(0, 200) : 'none'
         });
 
-        const response = await fetch(config.url, {
+        const response = await fetch(testUrl, {
           method,
           headers,
-          body: requestBody ? JSON.stringify(requestBody) : undefined
+          ...(requestBody && { body: JSON.stringify(requestBody) }) // Only include body if not null
         });
 
         const latency = Date.now() - startTime;
@@ -603,7 +643,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
 
           // Update status: PEMS = global only, AI = org if exists, otherwise global
           if (isPEMS) {
-            await prisma.apiConfiguration.update({
+            await prisma.api_configurations.update({
               where: { id: config.id },
               data: {
                 status: 'connected',
@@ -611,7 +651,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
               }
             });
           } else if (orgCred) {
-            await prisma.organizationApiCredentials.update({
+            await prisma.organization_api_credentials.update({
               where: { id: orgCred.id },
               data: {
                 status: 'connected',
@@ -620,7 +660,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
               }
             });
           } else {
-            await prisma.apiConfiguration.update({
+            await prisma.api_configurations.update({
               where: { id: config.id },
               data: {
                 status: 'connected',
@@ -636,7 +676,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
             status: response.status,
             statusText: response.statusText,
             errorBody: errorText,
-            url: config.url,
+            url: testUrl,
             username
           });
 
@@ -658,7 +698,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
 
           // Update status: PEMS = global only, AI = org if exists, otherwise global
           if (isPEMS) {
-            await prisma.apiConfiguration.update({
+            await prisma.api_configurations.update({
               where: { id: config.id },
               data: {
                 status: 'error',
@@ -666,7 +706,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
               }
             });
           } else if (orgCred) {
-            await prisma.organizationApiCredentials.update({
+            await prisma.organization_api_credentials.update({
               where: { id: orgCred.id },
               data: {
                 status: 'error',
@@ -675,7 +715,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
               }
             });
           } else {
-            await prisma.apiConfiguration.update({
+            await prisma.api_configurations.update({
               where: { id: config.id },
               data: {
                 status: 'error',
@@ -686,7 +726,6 @@ export const testApiConfig = async (req: Request, res: Response) => {
         }
       } else if (config.usage.startsWith('AI')) {
         // Test AI provider connection (REAL TEST, not mocked!)
-        let testResponse;
 
         if (config.usage === 'AI_GEMINI') {
           // Test Gemini API
@@ -706,7 +745,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
           const latency = Date.now() - startTime;
 
           if (response.ok) {
-            const data = await response.json();
+            const data: any = await response.json();
             testResult = {
               success: true,
               message: 'Connection successful! Gemini API key is valid.',
@@ -715,7 +754,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
             };
 
             if (orgCred) {
-              await prisma.organizationApiCredentials.update({
+              await prisma.organization_api_credentials.update({
                 where: { id: orgCred.id },
                 data: {
                   status: 'connected',
@@ -724,7 +763,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
                 }
               });
             } else {
-              await prisma.apiConfiguration.update({
+              await prisma.api_configurations.update({
                 where: { id: config.id },
                 data: {
                   status: 'connected',
@@ -733,7 +772,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
               });
             }
           } else {
-            const errorData = await response.json();
+            const errorData: any = await response.json();
             testResult = {
               success: false,
               message: `Invalid API key or request error: ${response.statusText}`,
@@ -741,7 +780,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
             };
 
             if (orgCred) {
-              await prisma.organizationApiCredentials.update({
+              await prisma.organization_api_credentials.update({
                 where: { id: orgCred.id },
                 data: {
                   status: 'error',
@@ -750,7 +789,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
                 }
               });
             } else {
-              await prisma.apiConfiguration.update({
+              await prisma.api_configurations.update({
                 where: { id: config.id },
                 data: {
                   status: 'error',
@@ -778,7 +817,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
             };
 
             if (orgCred) {
-              await prisma.organizationApiCredentials.update({
+              await prisma.organization_api_credentials.update({
                 where: { id: orgCred.id },
                 data: {
                   status: 'connected',
@@ -787,7 +826,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
                 }
               });
             } else {
-              await prisma.apiConfiguration.update({
+              await prisma.api_configurations.update({
                 where: { id: config.id },
                 data: {
                   status: 'connected',
@@ -796,7 +835,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
               });
             }
           } else {
-            const errorData = await response.json();
+            const errorData: any = await response.json();
             testResult = {
               success: false,
               message: `Invalid API key: ${response.statusText}`,
@@ -804,7 +843,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
             };
 
             if (orgCred) {
-              await prisma.organizationApiCredentials.update({
+              await prisma.organization_api_credentials.update({
                 where: { id: orgCred.id },
                 data: {
                   status: 'error',
@@ -813,7 +852,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
                 }
               });
             } else {
-              await prisma.apiConfiguration.update({
+              await prisma.api_configurations.update({
                 where: { id: config.id },
                 data: {
                   status: 'error',
@@ -832,33 +871,8 @@ export const testApiConfig = async (req: Request, res: Response) => {
       }
 
       res.json(testResult);
-    } catch (error: any) {
-      logger.error('Connection test failed:', error);
-
-      // Update status based on whether we have org creds or using global
-      if (isPEMS || !orgCred) {
-        await prisma.apiConfiguration.update({
-          where: { id: config.id },
-          data: {
-            status: 'error',
-            lastChecked: new Date()
-          }
-        });
-      } else {
-        await prisma.organizationApiCredentials.update({
-          where: { id: orgCred.id },
-          data: {
-            status: 'error',
-            lastChecked: new Date(),
-            lastError: error.message
-          }
-        });
-      }
-
-      res.json({
-        success: false,
-        message: `Connection test failed: ${error.message}`
-      });
+    } catch (error: unknown) {
+      handleControllerError(error, res, 'ApiConfigController.testConnection');
     }
   } catch (error) {
     logger.error('Test API config failed:', error);
@@ -873,7 +887,7 @@ export const testApiConfig = async (req: Request, res: Response) => {
  * POST /api/configs (Admin only)
  * Create a new global API configuration
  */
-export const createGlobalConfig = async (req: Request, res: Response) => {
+export const createGlobalConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       name,
@@ -890,10 +904,11 @@ export const createGlobalConfig = async (req: Request, res: Response) => {
 
     // Validation
     if (!name || !usage || !url || !authType) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_REQUEST',
         message: 'Missing required fields'
       });
+      return;
     }
 
     // Encrypt credentials
@@ -918,7 +933,7 @@ export const createGlobalConfig = async (req: Request, res: Response) => {
       customHeaders = JSON.stringify(headers);
     }
 
-    const config = await prisma.apiConfiguration.create({
+    const config = await prisma.api_configurations.create({
       data: {
         organizationId: null, // NULL = global
         name,
@@ -929,8 +944,10 @@ export const createGlobalConfig = async (req: Request, res: Response) => {
         authValueEncrypted,
         customHeaders,
         operationType: operationType || 'read',
-        status: 'untested'
-      }
+        status: 'untested',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as any
     });
 
     res.json({
@@ -959,7 +976,7 @@ export const createGlobalConfig = async (req: Request, res: Response) => {
  * PUT /api/configs/:id (Admin only)
  * Update a global API configuration
  */
-export const updateGlobalConfig = async (req: Request, res: Response) => {
+export const updateGlobalConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const {
@@ -975,22 +992,24 @@ export const updateGlobalConfig = async (req: Request, res: Response) => {
     } = req.body;
 
     // Check if config exists and is global
-    const existing = await prisma.apiConfiguration.findUnique({
+    const existing = await prisma.api_configurations.findUnique({
       where: { id }
     });
 
     if (!existing) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'API configuration not found'
       });
+      return;
     }
 
     if (existing.organizationId !== null) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_CONFIG',
         message: 'This is not a global API configuration'
       });
+      return;
     }
 
     // Prepare update data
@@ -1074,7 +1093,7 @@ export const updateGlobalConfig = async (req: Request, res: Response) => {
       updateData.status = 'untested';
     }
 
-    const updated = await prisma.apiConfiguration.update({
+    const updated = await prisma.api_configurations.update({
       where: { id },
       data: updateData
     });
@@ -1105,31 +1124,33 @@ export const updateGlobalConfig = async (req: Request, res: Response) => {
  * DELETE /api/configs/:id (Admin only)
  * Delete a global API configuration
  */
-export const deleteGlobalConfig = async (req: Request, res: Response) => {
+export const deleteGlobalConfig = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
     // Verify it's a global config
-    const config = await prisma.apiConfiguration.findUnique({
+    const config = await prisma.api_configurations.findUnique({
       where: { id }
     });
 
     if (!config) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'API configuration not found'
       });
+      return;
     }
 
     if (config.organizationId !== null) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'INVALID_CONFIG',
         message: 'This is not a global API configuration'
       });
+      return;
     }
 
     // This will cascade delete all org credentials due to onDelete: Cascade
-    await prisma.apiConfiguration.delete({
+    await prisma.api_configurations.delete({
       where: { id }
     });
 

@@ -26,11 +26,7 @@ interface EnvConfig {
   PEMS_READ_PASSWORD: string;
   PEMS_READ_TENANT: string;
 
-  // PEMS API (Write)
-  PEMS_WRITE_ENDPOINT: string;
-  PEMS_WRITE_USERNAME: string;
-  PEMS_WRITE_PASSWORD: string;
-  PEMS_WRITE_TENANT: string;
+  // PEMS API Write Config - stored in database (api_servers + api_endpoints tables)
 
   // AI Providers (Optional)
   GEMINI_API_KEY?: string;
@@ -41,6 +37,9 @@ interface EnvConfig {
 
   // Redis (Optional)
   REDIS_URL?: string;
+
+  // AWS (Optional)
+  AWS_REGION?: string;
 
   // Logging
   LOG_LEVEL: string;
@@ -76,10 +75,8 @@ export const env: EnvConfig = {
   PEMS_READ_PASSWORD: getEnvVar('PEMS_READ_PASSWORD'),
   PEMS_READ_TENANT: getEnvVar('PEMS_READ_TENANT'),
 
-  PEMS_WRITE_ENDPOINT: getEnvVar('PEMS_WRITE_ENDPOINT'),
-  PEMS_WRITE_USERNAME: getEnvVar('PEMS_WRITE_USERNAME'),
-  PEMS_WRITE_PASSWORD: getEnvVar('PEMS_WRITE_PASSWORD'),
-  PEMS_WRITE_TENANT: getEnvVar('PEMS_WRITE_TENANT'),
+  // NOTE: PEMS Write configuration is stored in the database (api_servers + api_endpoints tables)
+  // See: backend/prisma/seed.ts for initial configuration
 
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -88,6 +85,8 @@ export const env: EnvConfig = {
   AZURE_OPENAI_ENDPOINT: process.env.AZURE_OPENAI_ENDPOINT,
 
   REDIS_URL: process.env.REDIS_URL,
+
+  AWS_REGION: process.env.AWS_REGION,
 
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
   LOG_FILE: process.env.LOG_FILE || 'logs/app.log',

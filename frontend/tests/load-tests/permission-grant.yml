@@ -1,0 +1,147 @@
+config:
+  target: "http://localhost:3001"
+  plugins:
+    expect: {}
+  phases:
+    # Warm-up phase
+    - duration: 15
+      arrivalRate: 5
+      name: "Warm-up"
+    # Load phase: 50 concurrent admins
+    - duration: 60
+      arrivalRate: 20
+      name: "Sustained load - 50 concurrent admins"
+    # Cool-down phase
+    - duration: 15
+      arrivalRate: 5
+      name: "Cool-down"
+  payload:
+    path: "./admin-credentials.json"
+    fields:
+      - "username"
+      - "password"
+  processor: "./processors/permission-grant-processor.js"
+  variables:
+    baseUrl: "http://localhost:3001"
+
+scenarios:
+  - name: "Grant Permission - Update Capabilities"
+    weight: 60
+    flow:
+      # Step 1: Login as admin
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+            - json: "$.user.id"
+              as: "adminUserId"
+          expect:
+            - statusCode: 200
+            - hasProperty: token
+
+      # Step 2: Get all users in organization
+      - function: "selectRandomUser"
+
+      # Step 3: Get user's current permissions
+      - get:
+          url: "/api/users/{{ targetUserId }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$[0].id"
+              as: "userOrgId"
+          expect:
+            - statusCode: 200
+
+      # Step 4: Update capabilities (grant permission)
+      - patch:
+          url: "/api/user-organizations/{{ userOrgId }}/capabilities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+            Content-Type: "application/json"
+          json:
+            capabilities:
+              perm_EditForecast: true
+              perm_Export: true
+          expect:
+            - statusCode: 200
+            - hasProperty: success
+
+      # Step 5: Verify permission was granted (read back)
+      - get:
+          url: "/api/users/{{ targetUserId }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  - name: "Grant Permission - Concurrent Modifications"
+    weight: 40
+    flow:
+      # Step 1: Login as admin
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+          expect:
+            - statusCode: 200
+
+      # Step 2: Select random user
+      - function: "selectRandomUser"
+
+      # Step 3: Get user-org ID
+      - get:
+          url: "/api/users/{{ targetUserId }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$[0].id"
+              as: "userOrgId"
+          expect:
+            - statusCode: 200
+
+      # Step 4: Grant multiple permissions in sequence (test database locking)
+      - patch:
+          url: "/api/user-organizations/{{ userOrgId }}/capabilities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+            Content-Type: "application/json"
+          json:
+            capabilities:
+              perm_Read: true
+          expect:
+            - statusCode: 200
+
+      - patch:
+          url: "/api/user-organizations/{{ userOrgId }}/capabilities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+            Content-Type: "application/json"
+          json:
+            capabilities:
+              perm_EditForecast: true
+          expect:
+            - statusCode: 200
+
+      - patch:
+          url: "/api/user-organizations/{{ userOrgId }}/capabilities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+            Content-Type: "application/json"
+          json:
+            capabilities:
+              perm_ViewFinancials: true
+          expect:
+            - statusCode: 200

@@ -5,15 +5,83 @@
  */
 
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/database';
 import { pemsSyncService, SyncProgress } from '../services/pems/PemsSyncService';
-import { DataSourceOrchestrator } from '../services/DataSourceOrchestrator';
 import { logger } from '../utils/logger';
-
-const prisma = new PrismaClient();
 
 // Store active syncs in memory (in production, use Redis or database)
 const activeSyncs = new Map<string, SyncProgress>();
+
+/**
+ * Helper: Check if mapping configuration exists for an API/entity
+ * Returns { hasMappings, entityType, mappingCount }
+ *
+ * Supports both:
+ * - New architecture: api_endpoints table (entity field directly on endpoint)
+ * - Legacy architecture: api_configurations table (entity in feeds JSON)
+ */
+async function checkMappingConfiguration(apiConfigId: string): Promise<{
+  hasMappings: boolean;
+  entityType: string;
+  mappingCount: number;
+  details: string;
+}> {
+  let entityType = 'pfa'; // default
+
+  // First, try the new api_endpoints table (preferred)
+  const endpoint = await prisma.api_endpoints.findUnique({
+    where: { id: apiConfigId }
+  });
+
+  if (endpoint) {
+    entityType = endpoint.entity || 'pfa';
+  } else {
+    // Fallback to legacy api_configurations table
+    const config = await prisma.api_configurations.findUnique({
+      where: { id: apiConfigId }
+    });
+
+    if (!config) {
+      return { hasMappings: false, entityType: 'unknown', mappingCount: 0, details: 'API configuration not found in api_endpoints or api_configurations' };
+    }
+
+    // Parse feeds to determine entity type (legacy)
+    if (config.feeds) {
+      try {
+        const feeds = JSON.parse(config.feeds);
+        if (feeds && feeds.length > 0) {
+          entityType = feeds[0].entity;
+        }
+      } catch {
+        // Keep default
+      }
+    }
+  }
+
+  // Check api_field_mappings table
+  const fieldMappings = await prisma.api_field_mappings.findMany({
+    where: { endpointId: apiConfigId }
+  });
+
+  // Check mapping_templates table (unified mapping system)
+  const unifiedMappings = await prisma.mapping_templates.findMany({
+    where: { entity: entityType.toUpperCase() }
+  });
+
+  const hasFieldMappings = fieldMappings.length > 0;
+  const hasUnifiedMappings = unifiedMappings.length > 0;
+  const hasMappings = hasFieldMappings || hasUnifiedMappings;
+  const mappingCount = fieldMappings.length + unifiedMappings.length;
+
+  return {
+    hasMappings,
+    entityType,
+    mappingCount,
+    details: hasMappings
+      ? `Found ${mappingCount} mapping configuration(s)`
+      : `No mapping configuration for entity ${entityType}`
+  };
+}
 
 // Batch sync tracking
 interface BatchSync {
@@ -92,36 +160,38 @@ export const startSync = async (req: Request, res: Response) => {
     };
     activeSyncs.set(syncId, initialProgress);
 
-    // Determine entity type from API configuration feeds
-    const config = await prisma.apiConfiguration.findUnique({
-      where: { id: apiConfigId }
-    });
+    // Check if mapping configuration exists for this API config/entity
+    // Mappings are required for the sync to know how to transform external data
+    const mappingCheck = await checkMappingConfiguration(apiConfigId);
 
-    if (!config) {
-      return res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'API configuration not found'
+    if (!mappingCheck.hasMappings) {
+      logger.warn(`No mapping configuration found for API ${apiConfigId} entity ${mappingCheck.entityType}`, {
+        organizationId,
+        apiConfigId,
+        entityType: mappingCheck.entityType
+      });
+
+      // Clean up the sync entry since we're not proceeding
+      activeSyncs.delete(syncId);
+
+      return res.status(400).json({
+        error: 'MAPPING_REQUIRED',
+        message: `Cannot sync ${mappingCheck.entityType} data: No field mapping configuration exists for this endpoint. Please configure field mappings in Mapping Studio before syncing.`,
+        details: {
+          apiConfigId,
+          entity: mappingCheck.entityType,
+          action: 'Navigate to Admin → Mapping Studio to create a mapping configuration for this endpoint'
+        }
       });
     }
 
-    // Parse feeds to determine entity type
-    let entityType = 'pfa'; // default
-    if (config.feeds) {
-      try {
-        const feeds = JSON.parse(config.feeds);
-        if (feeds && feeds.length > 0) {
-          entityType = feeds[0].entity;
-        }
-      } catch (e) {
-        logger.warn('Failed to parse feeds, defaulting to PFA:', e);
-      }
-    }
+    logger.info(`Starting ${mappingCheck.entityType} sync for organization ${organizationId} using PEMS sync service`, {
+      hasMappings: mappingCheck.hasMappings,
+      mappingCount: mappingCheck.mappingCount
+    });
 
-    logger.info(`Starting ${entityType} sync for organization ${organizationId} using data source orchestrator`);
-
-    // Use DataSourceOrchestrator for configurable API-to-entity mapping
-    const orchestrator = new DataSourceOrchestrator();
-    const syncPromise = orchestrator.executeSync(entityType, organizationId, syncType, syncId);
+    // Use PemsSyncService directly for all PEMS syncs
+    const syncPromise = pemsSyncService.syncPfaData(organizationId, syncType, syncId, apiConfigId);
 
     // Start sync in background (don't await)
     syncPromise
@@ -133,14 +203,14 @@ export const startSync = async (req: Request, res: Response) => {
         // Update API configuration with sync statistics
         if (progress.status === 'completed') {
           try {
-            const config = await prisma.apiConfiguration.findUnique({
+            const config = await prisma.api_configurations.findUnique({
               where: { id: apiConfigId }
             });
 
             if (config) {
               const totalRecords = (config.totalSyncRecordCount || 0) + progress.insertedRecords + progress.updatedRecords;
 
-              await prisma.apiConfiguration.update({
+              await prisma.api_configurations.update({
                 where: { id: apiConfigId },
                 data: {
                   firstSyncAt: config.firstSyncAt || progress.startedAt,
@@ -172,7 +242,7 @@ export const startSync = async (req: Request, res: Response) => {
       });
 
     // Return immediately with sync started message
-    res.json({
+    return res.json({
       success: true,
       message: 'PFA data sync started',
       syncId: syncId,
@@ -181,7 +251,7 @@ export const startSync = async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Failed to start sync:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SYNC_ERROR',
       message: error instanceof Error ? error.message : 'Failed to start sync'
     });
@@ -205,7 +275,7 @@ export const getSyncStatus = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       syncId: sync.syncId,
       status: sync.status,
       organizationId: sync.organizationId,
@@ -235,7 +305,7 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Failed to get sync status:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SERVER_ERROR',
       message: 'Failed to get sync status'
     });
@@ -263,7 +333,7 @@ export const getSyncHistory = async (req: Request, res: Response) => {
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
       .slice(0, 10); // Return last 10 syncs
 
-    res.json({
+    return res.json({
       organizationId,
       history: history.map(sync => ({
         syncId: sync.syncId,
@@ -283,7 +353,7 @@ export const getSyncHistory = async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Failed to get sync history:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SERVER_ERROR',
       message: 'Failed to get sync history'
     });
@@ -318,7 +388,7 @@ export const cancelSync = async (req: Request, res: Response) => {
     sync.status = 'cancelled';
     sync.completedAt = new Date();
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Sync cancelled',
       syncId: sync.syncId
@@ -326,7 +396,7 @@ export const cancelSync = async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Failed to cancel sync:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SERVER_ERROR',
       message: 'Failed to cancel sync'
     });
@@ -350,8 +420,26 @@ export const syncGlobalApi = async (req: Request, res: Response) => {
 
     logger.info(`Global sync request received for API ${apiConfigId}`);
 
+    // Check if mapping configuration exists for this API
+    const mappingCheck = await checkMappingConfiguration(apiConfigId);
+    if (!mappingCheck.hasMappings) {
+      logger.warn(`Global sync rejected - no mapping configuration for API ${apiConfigId}`, {
+        entityType: mappingCheck.entityType
+      });
+
+      return res.status(400).json({
+        error: 'MAPPING_REQUIRED',
+        message: `Cannot sync ${mappingCheck.entityType} data: No field mapping configuration exists for this API. Please configure field mappings in Mapping Studio before syncing.`,
+        details: {
+          apiConfigId,
+          entity: mappingCheck.entityType,
+          action: 'Navigate to Admin → Mapping Studio to create a mapping configuration for this endpoint'
+        }
+      });
+    }
+
     // Get all active organizations
-    const organizations = await prisma.organization.findMany({
+    const organizations = await prisma.organizations.findMany({
       where: { isActive: true }
     });
 
@@ -405,26 +493,8 @@ export const syncGlobalApi = async (req: Request, res: Response) => {
       };
       activeSyncs.set(syncId, initialProgress);
 
-      // Determine entity type from API config
-      const apiConfig = await prisma.apiConfiguration.findUnique({
-        where: { id: apiConfigId }
-      });
-
-      let entityType = 'pfa';
-      if (apiConfig?.feeds) {
-        try {
-          const feeds = JSON.parse(apiConfig.feeds);
-          if (feeds && feeds.length > 0) {
-            entityType = feeds[0].entity;
-          }
-        } catch (e) {
-          logger.warn('Failed to parse feeds:', e);
-        }
-      }
-
-      // Use DataSourceOrchestrator for configurable routing
-      const orchestrator = new DataSourceOrchestrator();
-      const syncPromise = orchestrator.executeSync(entityType, org.id, syncType, syncId);
+      // Use PemsSyncService directly for all PEMS syncs
+      const syncPromise = pemsSyncService.syncPfaData(org.id, syncType, syncId, apiConfigId);
 
       // Start sync in background
       syncPromise
@@ -484,7 +554,7 @@ export const syncGlobalApi = async (req: Request, res: Response) => {
     activeBatches.set(batchId, batch);
 
     // Return batch info
-    res.json({
+    return res.json({
       success: true,
       message: `Started sync for ${organizations.length} organizations`,
       batchId,
@@ -496,7 +566,7 @@ export const syncGlobalApi = async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Failed to start global sync:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SYNC_ERROR',
       message: error instanceof Error ? error.message : 'Failed to start global sync'
     });
@@ -521,10 +591,9 @@ export const syncOrgApis = async (req: Request, res: Response) => {
     logger.info(`Organization sync request received for ${organizationId}`);
 
     // Get all API configurations with feeds
-    const apiConfigs = await prisma.apiConfiguration.findMany({
+    const apiConfigs = await prisma.api_configurations.findMany({
       where: {
-        feeds: { not: null },
-        isActive: true
+        feeds: { not: null }
       }
     });
 
@@ -535,23 +604,71 @@ export const syncOrgApis = async (req: Request, res: Response) => {
       });
     }
 
+    // Check mapping configurations for each API - filter to only those with mappings
+    const apisWithMappingStatus = await Promise.all(
+      apiConfigs.map(async (apiConfig) => {
+        const mappingCheck = await checkMappingConfiguration(apiConfig.id);
+        return {
+          apiConfig,
+          mappingCheck
+        };
+      })
+    );
+
+    const apisWithMappings = apisWithMappingStatus.filter(a => a.mappingCheck.hasMappings);
+    const apisWithoutMappings = apisWithMappingStatus.filter(a => !a.mappingCheck.hasMappings);
+
+    if (apisWithMappings.length === 0) {
+      logger.warn(`Organization sync rejected - no APIs have mapping configurations`, {
+        organizationId,
+        totalApis: apiConfigs.length,
+        apisWithoutMappings: apisWithoutMappings.map(a => ({
+          apiId: a.apiConfig.id,
+          name: a.apiConfig.name,
+          entity: a.mappingCheck.entityType
+        }))
+      });
+
+      return res.status(400).json({
+        error: 'MAPPING_REQUIRED',
+        message: `Cannot sync: None of the ${apiConfigs.length} API(s) have field mapping configurations. Please configure field mappings in Mapping Studio before syncing.`,
+        details: {
+          totalApis: apiConfigs.length,
+          apisWithoutMappings: apisWithoutMappings.map(a => ({
+            apiId: a.apiConfig.id,
+            name: a.apiConfig.name,
+            entity: a.mappingCheck.entityType
+          })),
+          action: 'Navigate to Admin → Mapping Studio to create mapping configurations for each endpoint'
+        }
+      });
+    }
+
+    // Log if some APIs are being skipped
+    if (apisWithoutMappings.length > 0) {
+      logger.info(`Organization sync - skipping ${apisWithoutMappings.length} API(s) without mappings`, {
+        organizationId,
+        skippedApis: apisWithoutMappings.map(a => a.apiConfig.name)
+      });
+    }
+
     // Generate batch ID
     const batchId = `batch-${Date.now()}`;
 
-    // Create batch tracking entry
+    // Create batch tracking entry - only count APIs that have mappings
     const batch: BatchSync = {
       batchId,
       type: 'org-all-apis',
       status: 'running',
       startedAt: new Date(),
       syncs: [],
-      totalSyncs: apiConfigs.length,
+      totalSyncs: apisWithMappings.length,
       completedSyncs: 0,
       failedSyncs: 0
     };
 
-    // Start syncs for each API
-    for (const apiConfig of apiConfigs) {
+    // Start syncs for each API that has mapping configuration
+    for (const { apiConfig } of apisWithMappings) {
       const syncId = `pfa-sync-${Date.now()}-${apiConfig.id.substring(0, 8)}`;
 
       // Add to batch
@@ -578,22 +695,8 @@ export const syncOrgApis = async (req: Request, res: Response) => {
       };
       activeSyncs.set(syncId, initialProgress);
 
-      // Determine entity type from feeds
-      let entityType = 'pfa';
-      if (apiConfig.feeds) {
-        try {
-          const feeds = JSON.parse(apiConfig.feeds);
-          if (feeds && feeds.length > 0) {
-            entityType = feeds[0].entity;
-          }
-        } catch (e) {
-          logger.warn('Failed to parse feeds:', e);
-        }
-      }
-
-      // Use DataSourceOrchestrator for configurable routing
-      const orchestrator = new DataSourceOrchestrator();
-      const syncPromise = orchestrator.executeSync(entityType, organizationId, syncType, syncId);
+      // Use PemsSyncService directly for all PEMS syncs
+      const syncPromise = pemsSyncService.syncPfaData(organizationId, syncType, syncId, apiConfig.id);
 
       // Start sync in background
       syncPromise
@@ -653,19 +756,25 @@ export const syncOrgApis = async (req: Request, res: Response) => {
     activeBatches.set(batchId, batch);
 
     // Return batch info
-    res.json({
+    return res.json({
       success: true,
-      message: `Started sync for ${apiConfigs.length} APIs`,
+      message: `Started sync for ${apisWithMappings.length} API(s)${apisWithoutMappings.length > 0 ? `, skipped ${apisWithoutMappings.length} without mappings` : ''}`,
       batchId,
       syncs: batch.syncs.map(s => ({
         syncId: s.syncId,
         apiConfigId: s.apiConfigId
-      }))
+      })),
+      skippedApis: apisWithoutMappings.length > 0 ? apisWithoutMappings.map(a => ({
+        apiId: a.apiConfig.id,
+        name: a.apiConfig.name,
+        entity: a.mappingCheck.entityType,
+        reason: 'No mapping configuration'
+      })) : undefined
     });
 
   } catch (error) {
     logger.error('Failed to start organization sync:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SYNC_ERROR',
       message: error instanceof Error ? error.message : 'Failed to start organization sync'
     });
@@ -719,7 +828,7 @@ export const getBatchStatus = async (req: Request, res: Response) => {
       errorRecords: syncsWithProgress.reduce((sum, s) => sum + (s.progress?.errors || 0), 0)
     };
 
-    res.json({
+    return res.json({
       batchId: batch.batchId,
       type: batch.type,
       status: batch.status,
@@ -739,7 +848,7 @@ export const getBatchStatus = async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Failed to get batch status:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'SERVER_ERROR',
       message: 'Failed to get batch status'
     });

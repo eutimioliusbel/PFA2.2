@@ -11,50 +11,224 @@
         theme: {
           extend: {
             colors: {
+              // Slate palette (extended)
               slate: {
                 850: '#1e293b',
                 900: '#0f172a',
+                950: '#020617',
               },
+              // Primary brand color (blue)
               primary: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                200: '#bfdbfe',
+                300: '#93c5fd',
+                400: '#60a5fa',
                 500: '#3b82f6',
                 600: '#2563eb',
-              }
+                700: '#1d4ed8',
+                800: '#1e40af',
+                900: '#1e3a8a',
+              },
+              // Accent color (orange - for CTAs and highlights)
+              accent: {
+                50: '#fff7ed',
+                100: '#ffedd5',
+                200: '#fed7aa',
+                300: '#fdba74',
+                400: '#fb923c',
+                500: '#f97316',
+                600: '#ea580c',
+                700: '#c2410c',
+                800: '#9a3412',
+                900: '#7c2d12',
+              },
+              // Theme-aware surface colors (via CSS variables)
+              surface: {
+                DEFAULT: 'var(--color-surface)',
+                hover: 'var(--color-surface-hover)',
+                active: 'var(--color-surface-active)',
+                elevated: 'var(--color-surface-elevated)',
+              },
+              // Theme-aware text colors
+              content: {
+                DEFAULT: 'var(--color-content)',
+                secondary: 'var(--color-content-secondary)',
+                tertiary: 'var(--color-content-tertiary)',
+                inverted: 'var(--color-content-inverted)',
+              },
+              // Theme-aware border colors
+              border: {
+                DEFAULT: 'var(--color-border)',
+                hover: 'var(--color-border-hover)',
+                focus: 'var(--color-border-focus)',
+              },
             },
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            }
+              sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+              mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+            },
+            fontSize: {
+              '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
+            },
+            boxShadow: {
+              'inner-sm': 'inset 0 1px 2px 0 rgb(0 0 0 / 0.05)',
+              'glow-primary': '0 0 15px -3px rgb(59 130 246 / 0.3)',
+              'glow-accent': '0 0 15px -3px rgb(249 115 22 / 0.3)',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.2s ease-out',
+              'slide-up': 'slideUp 0.3s ease-out',
+              'slide-down': 'slideDown 0.3s ease-out',
+              'scale-in': 'scaleIn 0.2s ease-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(10px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              slideDown: {
+                '0%': { transform: 'translateY(-10px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              scaleIn: {
+                '0%': { transform: 'scale(0.95)', opacity: '0' },
+                '100%': { transform: 'scale(1)', opacity: '1' },
+              },
+            },
           }
         }
       }
     </script>
     <style>
-      /* Custom scrollbar for the timeline */
+      /* ============================================
+         THEME SYSTEM - CSS Custom Properties
+         Add new themes by creating a new class block
+         ============================================ */
+
+      /* Light Theme (Default) */
+      :root, .light {
+        --color-surface: #ffffff;
+        --color-surface-hover: #f8fafc;
+        --color-surface-active: #f1f5f9;
+        --color-surface-elevated: #ffffff;
+        --color-content: #0f172a;
+        --color-content-secondary: #475569;
+        --color-content-tertiary: #94a3b8;
+        --color-content-inverted: #ffffff;
+        --color-border: #e2e8f0;
+        --color-border-hover: #cbd5e1;
+        --color-border-focus: #3b82f6;
+        --scrollbar-track: #f1f5f9;
+        --scrollbar-thumb: #cbd5e1;
+        --scrollbar-thumb-hover: #94a3b8;
+      }
+
+      /* Dark Theme */
+      .dark {
+        --color-surface: #0f172a;
+        --color-surface-hover: #1e293b;
+        --color-surface-active: #334155;
+        --color-surface-elevated: #1e293b;
+        --color-content: #f8fafc;
+        --color-content-secondary: #94a3b8;
+        --color-content-tertiary: #64748b;
+        --color-content-inverted: #0f172a;
+        --color-border: #334155;
+        --color-border-hover: #475569;
+        --color-border-focus: #60a5fa;
+        --scrollbar-track: #1e293b;
+        --scrollbar-thumb: #475569;
+        --scrollbar-thumb-hover: #64748b;
+      }
+
+      /* High Contrast Theme (for accessibility) */
+      .high-contrast {
+        --color-surface: #000000;
+        --color-surface-hover: #1a1a1a;
+        --color-surface-active: #333333;
+        --color-surface-elevated: #1a1a1a;
+        --color-content: #ffffff;
+        --color-content-secondary: #e5e5e5;
+        --color-content-tertiary: #b3b3b3;
+        --color-content-inverted: #000000;
+        --color-border: #666666;
+        --color-border-hover: #999999;
+        --color-border-focus: #ffff00;
+        --scrollbar-track: #1a1a1a;
+        --scrollbar-thumb: #666666;
+        --scrollbar-thumb-hover: #999999;
+      }
+
+      /* Sepia Theme (reduce eye strain) */
+      .sepia {
+        --color-surface: #faf8f1;
+        --color-surface-hover: #f5f0e1;
+        --color-surface-active: #ebe5d3;
+        --color-surface-elevated: #ffffff;
+        --color-content: #3d3929;
+        --color-content-secondary: #6b6352;
+        --color-content-tertiary: #9a917a;
+        --color-content-inverted: #faf8f1;
+        --color-border: #d4cdb8;
+        --color-border-hover: #bfb69e;
+        --color-border-focus: #8b7355;
+        --scrollbar-track: #f5f0e1;
+        --scrollbar-thumb: #d4cdb8;
+        --scrollbar-thumb-hover: #bfb69e;
+      }
+
+      /* ============================================
+         GLOBAL STYLES
+         ============================================ */
+
+      /* Custom scrollbar (theme-aware) */
       .custom-scrollbar::-webkit-scrollbar {
         height: 8px;
         width: 8px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: #f1f5f9;
+        background: var(--scrollbar-track);
         border-radius: 4px;
-      }
-      .dark .custom-scrollbar::-webkit-scrollbar-track {
-        background: #1e293b;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
+        background: var(--scrollbar-thumb);
         border-radius: 4px;
       }
-      .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #475569;
-      }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background: var(--scrollbar-thumb-hover);
       }
+
+      /* Body background (theme-aware) */
       body {
-        background-color: #f8fafc;
+        background-color: var(--color-surface);
+        color: var(--color-content);
+        transition: background-color 0.2s ease, color 0.2s ease;
       }
-      .dark body {
-        background-color: #0f172a;
+
+      /* Focus ring utility */
+      .focus-ring {
+        outline: 2px solid transparent;
+        outline-offset: 2px;
+      }
+      .focus-ring:focus-visible {
+        outline-color: var(--color-border-focus);
+      }
+
+      /* Smooth transitions for theme switching */
+      *, *::before, *::after {
+        transition-property: background-color, border-color;
+        transition-duration: 0.15s;
+        transition-timing-function: ease;
+      }
+
+      /* Disable transitions during theme switch to prevent flash */
+      .theme-transitioning * {
+        transition: none !important;
       }
     </style>
   <script type="importmap">
@@ -72,6 +246,6 @@
 </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
+  <script type="module" src="/frontend/index.tsx"></script>
 </body>
 </html>

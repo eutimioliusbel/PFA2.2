@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+backend/node_modules
+
+# Build outputs
+dist
+backend/dist
+build
+
+# Coverage
+coverage
+.nyc_output
+
+# Generated files
+backend/prisma/migrations
+
+# Test results
+test-results
+playwright-report
+
+# Temp files
+temp
+
+# Lock files
+package-lock.json
+backend/package-lock.json
+
+# Logs
+*.log

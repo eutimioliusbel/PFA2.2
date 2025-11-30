@@ -2039,6 +2039,306 @@ The following UX specifications define the "safety nets" for data integrity and 
 
 ---
 
+### Use Case H4: API Server Management UI (Permission-Based Visibility)
+
+**Scenario**: Admin needs to manage API servers (from ADR-006) with permission-based action visibility and organization service status awareness.
+
+**UI Mockup - API Connectivity Table**:
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 🔌 API Connectivity                                                    │
+├────────────────────────────────────────────────────────────────────────┤
+│ Server Name      │ Organization         │ Status │ Endpoints │ Actions│
+├──────────────────┼──────────────────────┼────────┼───────────┼────────┤
+│ PEMS Production  │ HOLNG [✅ Active]    │ OK     │ 7         │ [Edit] │
+│                  │                      │        │           │ [Test] │
+├──────────────────┼──────────────────────┼────────┼───────────┼────────┤
+│ PEMS Dev         │ RIO [⚠️ Suspended]   │ -      │ 5         │ [View  │
+│                  │                      │        │           │ Only]  │
+├──────────────────┼──────────────────────┼────────┼───────────┼────────┤
+│ ESS Integration  │ BECH [☁️ External]   │ OK     │ 3         │ [Edit] │
+│                  │                      │        │           │ [Test] │
+└──────────────────┴──────────────────────┴────────┴───────────┴────────┘
+
+ℹ️ RIO is suspended - API servers are unavailable
+
+[+ Add Server] ← Only visible if perm_ManageSettings = true
+```
+
+**Organization Status Badges**:
+- `✅ Active` = Green badge with tooltip: "Organization is active"
+- `⚠️ Suspended` = Orange badge with tooltip: "Organization is suspended - API servers unavailable"
+- `☁️ External` = Blue badge with tooltip: "PEMS-managed organization"
+
+**Permission-Based Action Visibility**:
+- **[+ Add Server] button**:
+  - **Hidden** if `!perm_ManageSettings`
+  - Visible only when user has permission to manage API servers
+
+- **[Edit] button** (per row):
+  - **Hidden** if `!perm_ManageSettings`
+  - Replaced with **[View Only]** label for suspended organizations
+
+- **[Test] button** (per row):
+  - **Always visible** (read operation, no permission required)
+  - **Disabled** if organization is suspended
+  - Tooltip on disabled state: "Cannot test - Organization is suspended"
+
+**Suspended Organization Behavior**:
+- API servers for suspended orgs display:
+  - Grayed-out row (opacity: 0.6)
+  - Status column shows "-" instead of "OK"
+  - Actions column shows **[View Only]** text (no buttons)
+  - Orange warning banner appears above table: "RIO is suspended - API servers are unavailable"
+
+---
+
+**UI Mockup - Add Server Modal (Permission Filtering)**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ➕ Add API Server                                                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Server Name:   _____________________                                    │
+│                                                                          │
+│ Organization:  [Dropdown: HOLNG, BECH, RIO ⚠️]                          │
+│                ⚠️ Only organizations where you have perm_ManageSettings │
+│                   are shown                                             │
+│                                                                          │
+│ Base URL:      https://______________________                           │
+│                                                                          │
+│ Auth Type:     ○ JWT  ○ Basic  ○ OAuth                                  │
+│                                                                          │
+│ [Cancel] [Create Server]                                                │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Modal Behavior**:
+- **Organization Dropdown**:
+  - **Filtered** to show only orgs where user has `perm_ManageSettings = true`
+  - Suspended orgs **included** in dropdown but display warning badge: "RIO ⚠️"
+  - Hovering suspended org shows tooltip: "This organization is suspended. API servers will be unavailable."
+
+- **Empty State** (if user has 0 orgs with permission):
+  ```
+  ┌───────────────────────────────────────────────────────────────┐
+  │ ⚠️ Permission Required                                        │
+  ├───────────────────────────────────────────────────────────────┤
+  │ You don't have permission to manage API servers.              │
+  │                                                                │
+  │ Contact your administrator to request perm_ManageSettings.    │
+  │                                                                │
+  │ [Dismiss]                                                      │
+  └───────────────────────────────────────────────────────────────┘
+  ```
+
+---
+
+**UI Mockup - Edit Server Modal (Organization Status Warning)**:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ✏️ Edit API Server: PEMS Dev                                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Server Name:   PEMS Dev                                                 │
+│                                                                          │
+│ Organization:  RIO [⚠️ Suspended]                                       │
+│                ⚠️ Warning: This organization is suspended. API server   │
+│                   will be unavailable until organization is reactivated.│
+│                                                                          │
+│ Base URL:      https://pems-dev.example.com                             │
+│                                                                          │
+│ Auth Type:     ● JWT  ○ Basic  ○ OAuth                                  │
+│                                                                          │
+│ [Cancel] [Save Changes]                                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Warning Display Rules**:
+- If selected organization is suspended:
+  - Show inline warning banner (orange background)
+  - Warning text: "This organization is suspended. API server will be unavailable until organization is reactivated."
+  - [Save Changes] button remains **enabled** (changes saved but server won't be accessible)
+
+---
+
+**Organization Service Status Cascading**:
+
+**Scenario**: Admin suspends organization "RIO" from Organization Settings.
+
+**UI State Changes** (real-time or on next table refresh):
+
+1. **API Connectivity Table**:
+   - RIO's API servers immediately show grayed-out with [View Only] actions
+   - Status column changes to "-" (orange badge)
+   - Orange warning banner appears: "RIO is suspended - API servers are unavailable"
+
+2. **Test Button Behavior**:
+   - [Test] button becomes **disabled**
+   - Tooltip on hover: "Cannot test - Organization is suspended"
+
+3. **Sync Button Behavior** (if applicable):
+   - [Sync Data] button becomes **disabled**
+   - Tooltip: "Cannot sync - Organization is suspended"
+
+**Visual State Transition**:
+```
+Before Suspension (RIO Active):
+│ PEMS Dev         │ RIO [✅ Active]   │ OK     │ 5         │ [Edit] [Test] │
+
+After Suspension (RIO Suspended):
+│ PEMS Dev         │ RIO [⚠️ Suspended]│ -      │ 5         │ [View Only]    │
+  (grayed out, opacity: 0.6)
+```
+
+---
+
+**Perceived Performance Specifications**:
+
+| Action | Target Latency | Perceived Performance |
+|--------|----------------|------------------------|
+| **Permission Check (Add/Edit buttons)** | <50ms | Cached from session on page load |
+| **Organization Status Update** | <100ms | Real-time via WebSocket or 5s polling |
+| **Badge Color Change (Active → Suspended)** | <100ms | Instant visual feedback (CSS class swap) |
+| **Modal Open (Add/Edit Server)** | <200ms | Permission filtering happens client-side |
+| **Table Refresh (after org suspension)** | <500ms | Shows skeleton rows while reloading |
+
+**Optimization Strategy**:
+- Permission checks cached in memory on component mount
+- Organization status badges pre-calculated on server (not real-time API calls)
+- WebSocket notifications trigger UI state changes without full table reload
+- Suspended org filtering uses client-side array filter (no backend query)
+
+---
+
+**Accessibility Requirements**:
+
+**Organization Status Badges**:
+- `aria-label` for screen readers:
+  - Active: `aria-label="Organization status: Active"`
+  - Suspended: `aria-label="Organization status: Suspended. API servers unavailable."`
+  - External: `aria-label="Organization status: External. Managed by PEMS."`
+
+**Disabled Action Buttons**:
+- [Edit] button (when hidden):
+  - If shown as grayed-out: `aria-disabled="true"` with tooltip
+  - Tooltip announces: "Edit unavailable - requires Manage Settings permission"
+
+- [Test] button (when disabled for suspended org):
+  - `aria-disabled="true"` with `aria-describedby` linking to tooltip
+  - Tooltip announces: "Test unavailable - Organization is suspended"
+
+**Permission-Filtered Dropdown** (Add/Edit Server Modal):
+- Organization dropdown announces filtered count:
+  - `aria-label="Organization selector. X organizations available where you have permission."`
+  - Example: "Organization selector. 3 organizations available where you have permission."
+
+**Empty State Modal** (no permission):
+- Modal header has `role="alertdialog"`
+- Warning icon announces: "Warning: Permission required to manage API servers"
+
+**Keyboard Navigation**:
+- Tab order: Table rows → [Edit] → [Test] buttons (skips hidden buttons)
+- Enter/Space on disabled [Test] button announces tooltip
+- Esc closes Add/Edit Server modal without saving
+
+**Screen Reader Announcements**:
+- When organization is suspended (live region):
+  - `aria-live="polite"` announces: "Organization RIO suspended. API servers are now unavailable."
+- When [+ Add Server] button appears/disappears:
+  - No announcement (not critical, user navigates to it intentionally)
+
+**Color Contrast** (WCAG AA Compliance):
+- Organization status badges:
+  - Green (Active): #10B981 on white (4.5:1 ratio) ✅
+  - Orange (Suspended): #F59E0B on white (3.7:1 ratio) ⚠️ Add darker variant: #D97706 (4.5:1) ✅
+  - Blue (External): #3B82F6 on white (4.5:1 ratio) ✅
+
+- Grayed-out rows (suspended orgs):
+  - Opacity: 0.6 (text contrast must still meet 4.5:1)
+  - Text color: #6B7280 (gray-500) on white (4.5:1 ratio) ✅
+
+**Focus Indicators**:
+```css
+/* All action buttons */
+button:focus-visible {
+  outline: 2px solid #0066CC;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Organization status badges */
+.badge-status:focus-visible {
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.25);
+}
+
+/* Disabled buttons (keyboard focus still visible) */
+button:disabled:focus-visible {
+  outline: 2px dashed #9CA3AF; /* Gray outline for disabled state */
+}
+```
+
+---
+
+**Error Handling**:
+
+**Permission Check Failed** (Add/Edit Server):
+```
+┌───────────────────────────────────────────────────────────────┐
+│ ❌ Permission Denied                                          │
+├───────────────────────────────────────────────────────────────┤
+│ You don't have permission to add API servers.                 │
+│                                                                │
+│ Required permission: perm_ManageSettings                       │
+│                                                                │
+│ Contact admin@example.com for access.                         │
+│                                                                │
+│ [Dismiss]                                                      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Organization Status Load Failed**:
+- Fallback to "Unknown" badge (gray) with tooltip: "Status unavailable. Refresh to retry."
+- Table still loads (graceful degradation)
+
+**Test Connection on Suspended Org** (if button somehow enabled):
+- Backend returns 403 error: "Organization is suspended. Cannot test API connection."
+- Frontend shows error toast: "Test failed: Organization RIO is suspended."
+
+---
+
+**Responsive Design**:
+
+**Desktop (1440px+)**:
+- Full table with all columns visible
+- Organization status badge inline with org name
+- Action buttons side-by-side
+
+**Tablet (768px)**:
+- Table scrolls horizontally
+- Organization column shows badge on second line
+- Actions column stacks buttons vertically
+
+**Mobile (375px)**:
+- Card-based layout instead of table:
+  ```
+  ┌─────────────────────────────────────┐
+  │ PEMS Production                     │
+  │ HOLNG [✅ Active]                   │
+  │ Status: OK | Endpoints: 7           │
+  │ [Edit] [Test]                       │
+  └─────────────────────────────────────┘
+  ```
+- [+ Add Server] button: Full-width at bottom
+
+---
+
+**Related Files**:
+- API Connectivity Component: `components/admin/ApiConnectivity.tsx`
+- API Server Model: `backend/prisma/schema.prisma` (ApiServer, ApiEndpoint)
+- Permission Service: `backend/src/services/permissionService.ts`
+- Organization Model: `backend/prisma/schema.prisma` (Organization.serviceStatus)
+
+---
+
 ## 📚 Related Documentation
 
 - **Decision**: [ADR-005-DECISION.md](./ADR-005-DECISION.md)
@@ -2048,15 +2348,15 @@ The following UX specifications define the "safety nets" for data integrity and 
 
 ---
 
-**Status**: UX Specification Complete (32 Total Use Cases: 25 AI + 4 Governance + 3 PEMS Hybrid)
+**Status**: UX Specification Complete (33 Total Use Cases: 25 AI + 4 Governance + 4 PEMS Hybrid)
 **Next Action**: Implement UI components following this specification
 
 **Document Statistics**:
-- **Use Cases Covered**: 32 total
+- **Use Cases Covered**: 33 total
   - 15 Core Access Control (Use Cases 1-15)
   - 10 AI/UX Intelligence (Use Cases 16-25)
   - 4 Core Governance & Operational (Use Cases G1-G4)
-  - 3 PEMS Hybrid Identity Management (Use Cases H1-H3)
+  - 4 PEMS Hybrid Identity Management (Use Cases H1-H4)
 - **UI Components**: 45+ specialized components
   - AI-powered: Context tooltips, voice analyst, scenario simulator, narrative reader, watchdog dashboard
   - Governance: Pre-Flight modal, Time Travel revert interface, Import wizard, BEO Glass Mode landing

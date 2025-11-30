@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../config/database';
+import crypto from 'crypto';
 
 /**
  * Get all field configurations (optionally filtered by organization)
@@ -10,7 +9,7 @@ export const getFieldConfigurations = async (req: Request, res: Response) => {
   try {
     const { organizationId } = req.query;
 
-    const configs = await prisma.fieldConfiguration.findMany({
+    const configs = await prisma.field_configurations.findMany({
       where: organizationId ? { organizationId: organizationId as string } : {},
       orderBy: [
         { isDefault: 'desc' },
@@ -28,16 +27,17 @@ export const getFieldConfigurations = async (req: Request, res: Response) => {
 /**
  * Get a single field configuration by ID
  */
-export const getFieldConfiguration = async (req: Request, res: Response) => {
+export const getFieldConfiguration = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const config = await prisma.fieldConfiguration.findUnique({
+    const config = await prisma.field_configurations.findUnique({
       where: { id }
     });
 
     if (!config) {
-      return res.status(404).json({ error: 'Field configuration not found' });
+      res.status(404).json({ error: 'Field configuration not found' });
+      return;
     }
 
     res.json(config);
@@ -50,7 +50,7 @@ export const getFieldConfiguration = async (req: Request, res: Response) => {
 /**
  * Create a new field configuration
  */
-export const createFieldConfiguration = async (req: Request, res: Response) => {
+export const createFieldConfiguration = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       organizationId,
@@ -66,7 +66,8 @@ export const createFieldConfiguration = async (req: Request, res: Response) => {
 
     // Validate required fields
     if (!name || !fieldMappings) {
-      return res.status(400).json({ error: 'Name and field mappings are required' });
+      res.status(400).json({ error: 'Name and field mappings are required' });
+      return;
     }
 
     // Convert fieldMappings to JSON string if it's an object
@@ -76,7 +77,7 @@ export const createFieldConfiguration = async (req: Request, res: Response) => {
 
     // If this is marked as default, unset other defaults for the same org
     if (isDefault) {
-      await prisma.fieldConfiguration.updateMany({
+      await prisma.field_configurations.updateMany({
         where: {
           organizationId: organizationId || null,
           isDefault: true
@@ -85,8 +86,9 @@ export const createFieldConfiguration = async (req: Request, res: Response) => {
       });
     }
 
-    const config = await prisma.fieldConfiguration.create({
+    const config = await prisma.field_configurations.create({
       data: {
+        id: crypto.randomUUID(),
         organizationId: organizationId || null,
         name,
         description: description || null,
@@ -95,7 +97,8 @@ export const createFieldConfiguration = async (req: Request, res: Response) => {
         includeHeaders: includeHeaders !== undefined ? includeHeaders : true,
         dateFormat: dateFormat || 'YYYY-MM-DD',
         delimiter: delimiter || ',',
-        encoding: encoding || 'UTF-8'
+        encoding: encoding || 'UTF-8',
+        updatedAt: new Date()
       }
     });
 
@@ -109,7 +112,7 @@ export const createFieldConfiguration = async (req: Request, res: Response) => {
 /**
  * Update an existing field configuration
  */
-export const updateFieldConfiguration = async (req: Request, res: Response) => {
+export const updateFieldConfiguration = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const {
@@ -124,17 +127,18 @@ export const updateFieldConfiguration = async (req: Request, res: Response) => {
     } = req.body;
 
     // Check if config exists
-    const existing = await prisma.fieldConfiguration.findUnique({
+    const existing = await prisma.field_configurations.findUnique({
       where: { id }
     });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Field configuration not found' });
+      res.status(404).json({ error: 'Field configuration not found' });
+      return;
     }
 
     // If this is marked as default, unset other defaults for the same org
     if (isDefault) {
-      await prisma.fieldConfiguration.updateMany({
+      await prisma.field_configurations.updateMany({
         where: {
           organizationId: existing.organizationId,
           isDefault: true,
@@ -149,7 +153,7 @@ export const updateFieldConfiguration = async (req: Request, res: Response) => {
       ? JSON.stringify(fieldMappings)
       : fieldMappings;
 
-    const config = await prisma.fieldConfiguration.update({
+    const config = await prisma.field_configurations.update({
       where: { id },
       data: {
         name: name || existing.name,
@@ -173,19 +177,20 @@ export const updateFieldConfiguration = async (req: Request, res: Response) => {
 /**
  * Delete a field configuration
  */
-export const deleteFieldConfiguration = async (req: Request, res: Response) => {
+export const deleteFieldConfiguration = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const config = await prisma.fieldConfiguration.findUnique({
+    const config = await prisma.field_configurations.findUnique({
       where: { id }
     });
 
     if (!config) {
-      return res.status(404).json({ error: 'Field configuration not found' });
+      res.status(404).json({ error: 'Field configuration not found' });
+      return;
     }
 
-    await prisma.fieldConfiguration.delete({
+    await prisma.field_configurations.delete({
       where: { id }
     });
 

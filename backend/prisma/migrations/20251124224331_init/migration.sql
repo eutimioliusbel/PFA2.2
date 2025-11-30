@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "users" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "email" TEXT,
     "passwordHash" TEXT NOT NULL,
@@ -8,35 +8,41 @@ CREATE TABLE "users" (
     "lastName" TEXT,
     "role" TEXT NOT NULL DEFAULT 'user',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "organizations" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "organizations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "user_organizations" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'member',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "user_organizations_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "user_organizations_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "user_organizations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "ai_providers" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
@@ -53,15 +59,17 @@ CREATE TABLE "ai_providers" (
     "retryDelayMs" INTEGER NOT NULL DEFAULT 1000,
     "timeoutMs" INTEGER NOT NULL DEFAULT 30000,
     "status" TEXT NOT NULL DEFAULT 'untested',
-    "lastHealthCheck" DATETIME,
+    "lastHealthCheck" TIMESTAMP(3),
     "errorRate" REAL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ai_providers_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "organization_ai_configs" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "accessLevel" TEXT NOT NULL DEFAULT 'full-access',
@@ -75,14 +83,16 @@ CREATE TABLE "organization_ai_configs" (
     "includeHistoricalData" BOOLEAN NOT NULL DEFAULT false,
     "enableSemanticCache" BOOLEAN NOT NULL DEFAULT true,
     "cacheExpirationHours" INTEGER NOT NULL DEFAULT 24,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "organization_ai_configs_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "organization_ai_configs_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "ai_usage_logs" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "provider" TEXT NOT NULL,
@@ -96,13 +106,15 @@ CREATE TABLE "ai_usage_logs" (
     "success" BOOLEAN NOT NULL DEFAULT true,
     "errorMessage" TEXT,
     "queryHash" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ai_usage_logs_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "ai_usage_logs_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "api_configurations" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "usage" TEXT NOT NULL,
@@ -114,16 +126,18 @@ CREATE TABLE "api_configurations" (
     "operationType" TEXT NOT NULL DEFAULT 'read',
     "feeds" TEXT,
     "status" TEXT NOT NULL DEFAULT 'untested',
-    "lastChecked" DATETIME,
+    "lastChecked" TIMESTAMP(3),
     "lastError" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "api_configurations_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "api_configurations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "pfa_records" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "pfaId" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "areaSilo" TEXT,
@@ -139,26 +153,28 @@ CREATE TABLE "pfa_records" (
     "purchasePrice" REAL,
     "manufacturer" TEXT,
     "model" TEXT,
-    "originalStart" DATETIME,
-    "originalEnd" DATETIME,
+    "originalStart" TIMESTAMP(3),
+    "originalEnd" TIMESTAMP(3),
     "hasPlan" BOOLEAN NOT NULL DEFAULT false,
-    "forecastStart" DATETIME,
-    "forecastEnd" DATETIME,
-    "actualStart" DATETIME,
-    "actualEnd" DATETIME,
+    "forecastStart" TIMESTAMP(3),
+    "forecastEnd" TIMESTAMP(3),
+    "actualStart" TIMESTAMP(3),
+    "actualEnd" TIMESTAMP(3),
     "hasActuals" BOOLEAN NOT NULL DEFAULT false,
     "contract" TEXT,
     "equipment" TEXT,
-    "lastModified" DATETIME,
+    "lastModified" TIMESTAMP(3),
     "lastModifiedBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "pfa_records_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "pfa_records_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable
 CREATE TABLE "sync_logs" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "syncType" TEXT NOT NULL,
     "status" TEXT NOT NULL,
@@ -169,7 +185,9 @@ CREATE TABLE "sync_logs" (
     "durationMs" INTEGER,
     "errorMessage" TEXT,
     "triggeredBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "sync_logs_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex

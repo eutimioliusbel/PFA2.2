@@ -1,0 +1,150 @@
+config:
+  target: "http://localhost:3001"
+  plugins:
+    expect: {}
+  phases:
+    # Phase 1: Test connection pool limits (Prisma default: 10 connections)
+    - duration: 30
+      arrivalRate: 5
+      name: "Baseline - 5 req/s (safe)"
+    # Phase 2: Approach connection limit
+    - duration: 30
+      arrivalRate: 15
+      name: "Moderate load - 15 req/s"
+    # Phase 3: Exceed connection pool (trigger queuing)
+    - duration: 30
+      arrivalRate: 30
+      name: "High load - 30 req/s (exceeds pool)"
+    # Phase 4: Connection pool exhaustion test
+    - duration: 30
+      arrivalRate: 50
+      name: "Connection pool exhaustion - 50 req/s"
+    # Cool-down phase
+    - duration: 20
+      arrivalRate: 5
+      name: "Cool-down"
+  payload:
+    path: "./test-credentials.json"
+    fields:
+      - "username"
+      - "password"
+  processor: "./processors/db-stress-processor.js"
+  variables:
+    baseUrl: "http://localhost:3001"
+
+scenarios:
+  - name: "Database Query Stress Test"
+    weight: 50
+    flow:
+      # Step 1: Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+          expect:
+            - statusCode: 200
+
+      # Step 2: Heavy database query (PFA read with filters)
+      - get:
+          url: "/api/pfa?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 500, 503] # 503 if DB pool exhausted
+
+      # Step 3: Audit log query (tests secondary connection)
+      - get:
+          url: "/api/users/{{ username }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 500, 503]
+
+      # Step 4: Join-heavy query (servers + endpoints)
+      - get:
+          url: "/api/servers?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 500, 503]
+
+  - name: "Database Write Stress Test"
+    weight: 30
+    flow:
+      # Step 1: Login as admin
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+          expect:
+            - statusCode: 200
+
+      # Step 2: Write operations (creates audit logs + permission updates)
+      - function: "selectRandomUser"
+
+      - get:
+          url: "/api/users/{{ targetUserId }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$[0].id"
+              as: "userOrgId"
+          expect:
+            - statusCode: [200, 403]
+
+      # Step 3: Database write (permission update + audit log)
+      - patch:
+          url: "/api/user-organizations/{{ userOrgId }}/capabilities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+            Content-Type: "application/json"
+          json:
+            capabilities:
+              perm_Read: true
+          expect:
+            - statusCode: [200, 403, 500, 503]
+
+  - name: "Long-Running Query Test"
+    weight: 20
+    flow:
+      # Step 1: Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "organizationId"
+          expect:
+            - statusCode: 200
+
+      # Step 2: Long-running query (holds connection for extended time)
+      - get:
+          url: "/api/pfa?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 500, 503, 504] # 504 if timeout
+
+      # Step 3: Immediate follow-up query (tests connection release)
+      - get:
+          url: "/api/servers?organizationId={{ organizationId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 500, 503]

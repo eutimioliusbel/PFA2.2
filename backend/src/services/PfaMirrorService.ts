@@ -275,7 +275,7 @@ export class PfaMirrorService {
       draft;
 
     // Get mirror record to capture base version
-    const mirrorRecord = await prisma.pfaMirror.findUnique({
+    const mirrorRecord = await prisma.pfa_mirror.findUnique({
       where: { id: mirrorId },
     });
 
@@ -284,7 +284,7 @@ export class PfaMirrorService {
     }
 
     // Check if draft already exists for this mirror + session
-    const existingDraft = await prisma.pfaModification.findFirst({
+    const existingDraft = await prisma.pfa_modification.findFirst({
       where: {
         mirrorId,
         userId,
@@ -295,7 +295,7 @@ export class PfaMirrorService {
 
     if (existingDraft) {
       // Update existing draft (merge deltas)
-      const mergedDelta = { ...existingDraft.delta, ...delta };
+      const mergedDelta = { ...(existingDraft.delta as Record<string, any>), ...delta };
       const mergedFields = Array.from(
         new Set([
           ...(Array.isArray(existingDraft.modifiedFields)
@@ -305,20 +305,22 @@ export class PfaMirrorService {
         ])
       );
 
-      await prisma.pfaModification.update({
+      await prisma.pfa_modification.update({
         where: { id: existingDraft.id },
         data: {
           delta: mergedDelta,
           modifiedFields: mergedFields,
           currentVersion: { increment: 1 },
+          updatedAt: new Date(),
         },
       });
 
       return existingDraft.id;
     } else {
       // Create new draft
-      const newDraft = await prisma.pfaModification.create({
+      const newDraft = await prisma.pfa_modification.create({
         data: {
+          id: `mod_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           mirrorId,
           organizationId: mirrorRecord.organizationId,
           userId,
@@ -327,7 +329,7 @@ export class PfaMirrorService {
           modifiedFields,
           changeReason,
           syncState: 'draft',
-          baseVersion: 1, // TODO: Implement versioning in mirror
+          updatedAt: new Date(),
         },
       });
 
@@ -340,7 +342,7 @@ export class PfaMirrorService {
    * Changes state from 'draft' to 'committed'
    */
   async commitSession(userId: string, sessionId: string): Promise<number> {
-    const result = await prisma.pfaModification.updateMany({
+    const result = await prisma.pfa_modification.updateMany({
       where: {
         userId,
         sessionId,
@@ -349,6 +351,7 @@ export class PfaMirrorService {
       data: {
         syncState: 'committed',
         committedAt: new Date(),
+        updatedAt: new Date(),
       },
     });
 
@@ -360,7 +363,7 @@ export class PfaMirrorService {
    * Deletes modifications in 'draft' state
    */
   async discardSession(userId: string, sessionId: string): Promise<number> {
-    const result = await prisma.pfaModification.deleteMany({
+    const result = await prisma.pfa_modification.deleteMany({
       where: {
         userId,
         sessionId,
@@ -401,12 +404,14 @@ export class PfaMirrorService {
    * Updates state from 'committed' to 'synced'
    */
   async markAsSynced(modificationIds: string[]): Promise<void> {
-    await prisma.pfaModification.updateMany({
+    await prisma.pfa_modification.updateMany({
       where: {
         id: { in: modificationIds },
       },
       data: {
         syncState: 'synced',
+        syncedAt: new Date(),
+        updatedAt: new Date(),
       },
     });
   }
@@ -434,8 +439,8 @@ export class PfaMirrorService {
       const batch = records.slice(i, i + BATCH_SIZE);
 
       try {
-        await prisma.$transaction(
-          batch.map((record) => {
+        await prisma.$transaction(async (tx): Promise<void> => {
+          for (const record of batch) {
             const jsonbData = {
               pfaId: record.pfaId,
               category: record.category,
@@ -462,29 +467,80 @@ export class PfaMirrorService {
               equipment: record.equipment,
             };
 
-            return prisma.pfaMirror.upsert({
-              where: {
-                pfa_mirror_org_pfa_unique: {
-                  organizationId,
-                  pfaId: record.pfaId,
+            {
+              const existingMirror = await tx.pfa_mirror.findUnique({
+                where: {
+                  organizationId_pfaId: {
+                    organizationId,
+                    pfaId: record.pfaId,
+                  },
                 },
-              },
-              update: {
-                data: jsonbData,
-                pemsVersion: record.lastModified,
-                lastSyncedAt: new Date(),
-                syncBatchId,
-              },
-              create: {
-                organizationId,
-                data: jsonbData,
-                pemsVersion: record.lastModified,
-                lastSyncedAt: new Date(),
-                syncBatchId,
-              },
-            });
-          })
-        );
+              });
+
+              if (existingMirror) {
+                await tx.pfa_mirror_history.create({
+                  data: {
+                    id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                    mirrorId: existingMirror.id,
+                    version: existingMirror.version,
+                    organizationId: existingMirror.organizationId,
+                    data: existingMirror.data as any,
+                    pfaId: existingMirror.pfaId,
+                    category: existingMirror.category,
+                    class: existingMirror.class,
+                    source: existingMirror.source,
+                    dor: existingMirror.dor,
+                    areaSilo: existingMirror.areaSilo,
+                    manufacturer: existingMirror.manufacturer,
+                    model: existingMirror.model,
+                    monthlyRate: existingMirror.monthlyRate,
+                    purchasePrice: existingMirror.purchasePrice,
+                    forecastStart: existingMirror.forecastStart,
+                    forecastEnd: existingMirror.forecastEnd,
+                    originalStart: existingMirror.originalStart,
+                    originalEnd: existingMirror.originalEnd,
+                    actualStart: existingMirror.actualStart,
+                    actualEnd: existingMirror.actualEnd,
+                    isActualized: existingMirror.isActualized,
+                    isDiscontinued: existingMirror.isDiscontinued,
+                    isFundsTransferable: existingMirror.isFundsTransferable,
+                    hasPlan: existingMirror.hasPlan,
+                    hasActuals: existingMirror.hasActuals,
+                    pemsVersion: existingMirror.pemsVersion,
+                    syncBatchId: existingMirror.syncBatchId,
+                    changedBy: 'CSV_IMPORT',
+                    changeReason: 'CSV bulk import update'
+                  }
+                });
+
+                await tx.pfa_mirror.update({
+                  where: { id: existingMirror.id },
+                  data: {
+                    data: jsonbData,
+                    pemsVersion: record.lastModified,
+                    version: existingMirror.version + 1,
+                    lastSyncedAt: new Date(),
+                    syncBatchId,
+                    updatedAt: new Date(),
+                  },
+                });
+              } else {
+                await tx.pfa_mirror.create({
+                  data: {
+                    id: `mirror_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                    organizationId,
+                    data: jsonbData,
+                    pemsVersion: record.lastModified,
+                    version: 1,
+                    lastSyncedAt: new Date(),
+                    syncBatchId,
+                    updatedAt: new Date(),
+                  },
+                });
+              }
+            }
+          }
+        });
 
         result.recordsProcessed += batch.length;
         // Note: Prisma doesn't return insert vs update counts

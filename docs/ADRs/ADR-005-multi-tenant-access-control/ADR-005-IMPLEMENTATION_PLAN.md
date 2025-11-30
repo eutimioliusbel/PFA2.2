@@ -10,18 +10,19 @@
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Phase 1: Database Schema Changes](#phase-1-database-schema-changes)
-3. [Phase 2: Backend Authorization](#phase-2-backend-authorization)
-4. [Phase 3: PEMS Sync Filtering](#phase-3-pems-sync-filtering)
-5. [Phase 4: Frontend Permission Enforcement](#phase-4-frontend-permission-enforcement)
-6. [Phase 5: Admin UI](#phase-5-admin-ui)
-7. [Phase 6: AI Foundation & Context-Aware Help](#phase-6-ai-foundation--context-aware-help)
-8. [Phase 7: UX Intelligence Features](#phase-7-ux-intelligence-features)
-9. [Phase 8: Executive BEO Intelligence](#phase-8-executive-beo-intelligence)
-10. [Phase 9: AI Integration & Refinement](#phase-9-ai-integration--refinement)
-11. [Phase 10: Testing & Documentation](#phase-10-testing--documentation)
-12. [Agent Workflow](#agent-workflow)
-13. [Rollback Plan](#rollback-plan)
+2. [Phase 0: PEMS API Setup & User Filtering](#phase-0-pems-api-setup--user-filtering)
+3. [Phase 1: Database Schema Changes](#phase-1-database-schema-changes)
+4. [Phase 2: Backend Authorization](#phase-2-backend-authorization)
+5. [Phase 3: PEMS Sync Filtering](#phase-3-pems-sync-filtering)
+6. [Phase 4: Frontend Permission Enforcement](#phase-4-frontend-permission-enforcement)
+7. [Phase 5: Admin UI](#phase-5-admin-ui)
+8. [Phase 6: AI Foundation & Context-Aware Help](#phase-6-ai-foundation--context-aware-help)
+9. [Phase 7: UX Intelligence Features](#phase-7-ux-intelligence-features)
+10. [Phase 8: Executive BEO Intelligence](#phase-8-executive-beo-intelligence)
+11. [Phase 9: AI Integration & Refinement](#phase-9-ai-integration--refinement)
+12. [Phase 10: Testing & Documentation](#phase-10-testing--documentation)
+13. [Agent Workflow](#agent-workflow)
+14. [Rollback Plan](#rollback-plan)
 
 ---
 
@@ -92,6 +93,385 @@ Implement a comprehensive multi-tenant access control system with AI-powered UX 
 | Voice Query Response Time | <3s | Executive analytics latency |
 | AI Model Inference Time | <500ms | Per-query AI processing time |
 | Notification Relevance Score | >85% | User engagement metrics |
+
+---
+
+## Phase 0: PEMS API Setup & User Filtering
+
+**Duration**: 1 day
+**Agent**: `backend-architecture-optimizer` + `postgres-jsonb-architect`
+**Priority**: CRITICAL (must complete before Phase 1)
+**Dependencies**: None
+
+### Objectives
+
+1. Review PEMS API documentation for Users and UserOrganizations
+2. Configure PEMS API credentials (reuse existing organization sync credentials)
+3. Implement user filtering logic (not all users will be synced)
+4. Create database seeders for test data
+5. Define sync criteria and filtering rules
+
+### PEMS API Documentation Review
+
+**Reference Files**:
+- `pems_apis_examples/HxGN EAM Webservices-users.mhtml` - User Setup API specification
+- `pems_apis_examples/HxGN EAM Webservices-users-organizations.mhtml` - User Organization API specification
+
+**Key PEMS API Endpoints**:
+
+```typescript
+// 1. Get Users Collection (with pagination)
+GET /usersetup
+Headers:
+  - tenant: {organizationCode} // e.g., "BECH"
+  - organization: {organizationCode}
+  - role: {userRole} (optional)
+  - cursorposition: {number} // For pagination
+
+Response: {
+  Result: {
+    ResultData: {
+      DATARECORD: [
+        {
+          USERID: { USERCODE: "string", DESCRIPTION: "string" },
+          EMAIL: "string",
+          ISACTIVE: "+" | "-",
+          USERGROUP: "string",
+          EXTERNALUSERID: "string" // Maps to User.externalId
+        }
+      ],
+      CURRENTCURSORPOSITION: number,
+      NEXTCURSORPOSITION: number,
+      RECORDS: number
+    }
+  }
+}
+
+// 2. Get User Organizations for specific user
+GET /usersetup/{userId}/organizations
+Headers:
+  - tenant: {organizationCode}
+  - organization: {organizationCode}
+  - role: {userRole} (optional)
+
+Response: {
+  Result: {
+    ResultData: {
+      DATARECORD: [
+        {
+          USERORGANIZATIONID: {
+            ORGANIZATIONID: { ORGANIZATIONCODE: "string" },
+            USERID: { USERCODE: "string" },
+            LDAPROLEID: { ROLECODE: "string" } // Maps to UserOrganization.externalRoleId
+          },
+          USERGROUP: "string"
+        }
+      ]
+    }
+  }
+}
+```
+
+### API Configuration
+
+**File**: `backend/prisma/seed.ts` (update existing PEMS API configuration)
+
+```typescript
+// Reuse existing PEMS credentials from organization sync
+const pemsUserApi = await prisma.apiConfiguration.create({
+  data: {
+    name: 'PEMS User Sync API',
+    type: 'PEMS',
+    operationType: 'read',
+    baseUrl: 'https://us1.eam.hxgnsmartcloud.com:443/axis/restservices',
+    authType: 'basic', // Same auth as organization sync
+    authConfig: JSON.stringify({
+      // CRITICAL: Use same credentials as organization sync
+      username: process.env.PEMS_API_USERNAME,
+      password: process.env.PEMS_API_PASSWORD,
+      tenant: 'BECH', // Same tenant as organization sync
+      organization: 'BECH'
+    }),
+    isActive: true,
+    feeds: JSON.stringify([
+      {
+        entity: 'users',
+        endpoint: '/usersetup',
+        views: ['User Management']
+      },
+      {
+        entity: 'user_organizations',
+        endpoint: '/usersetup/{userId}/organizations',
+        views: ['User Organization Assignments']
+      }
+    ])
+  }
+});
+```
+
+### User Filtering Logic
+
+**CRITICAL**: We will NOT sync all users from PEMS. Only users matching specific criteria will be synchronized.
+
+**Filtering Criteria**:
+
+```typescript
+// File: backend/src/services/pems/PemsUserSyncService.ts
+
+interface UserSyncFilter {
+  // Filter by organization assignment
+  requiredOrganizations?: string[]; // Only sync users assigned to these orgs
+
+  // Filter by user status
+  onlyActiveUsers?: boolean; // Default: true (ISACTIVE = '+')
+
+  // Filter by user group
+  allowedUserGroups?: string[]; // e.g., ['PROJECT_MANAGERS', 'ADMINS', 'ENGINEERS']
+
+  // Filter by custom field values
+  customFieldFilters?: {
+    fieldName: string; // e.g., 'UDFCHAR01'
+    values: string[]; // e.g., ['VANGUARD_USER', 'PFA_ACCESS']
+  }[];
+}
+
+export class PemsUserSyncService {
+  private readonly syncFilters: UserSyncFilter = {
+    requiredOrganizations: ['BECH', 'HOLNG', 'RIO'], // Only sync users in these orgs
+    onlyActiveUsers: true, // Skip inactive users (ISACTIVE = '-')
+    allowedUserGroups: [
+      'PROJECT_MANAGERS',
+      'COST_ENGINEERS',
+      'ADMINISTRATORS',
+      'BEO_USERS'
+    ],
+    customFieldFilters: [
+      {
+        fieldName: 'UDFCHAR01', // Custom field for "PFA Access Flag"
+        values: ['Y', 'YES', 'TRUE'] // Only sync users with PFA access
+      }
+    ]
+  };
+
+  async syncUsers(organizationId: string): Promise<SyncResult> {
+    const config = await this.getApiConfig();
+    const syncedUsers = [];
+    let cursorPosition = 0;
+
+    do {
+      // Fetch users from PEMS (paginated)
+      const response = await this.fetchPemsUsers(config, cursorPosition);
+      const users = response.Result.ResultData.DATARECORD;
+
+      for (const pemsUser of users) {
+        // Apply filtering logic
+        if (!this.shouldSyncUser(pemsUser)) {
+          console.log(`Skipping user ${pemsUser.USERID.USERCODE}: Does not match sync criteria`);
+          continue;
+        }
+
+        // Fetch user's organization assignments
+        const userOrgs = await this.fetchUserOrganizations(
+          config,
+          pemsUser.USERID.USERCODE
+        );
+
+        // Filter organizations
+        const filteredOrgs = userOrgs.filter(uo =>
+          this.syncFilters.requiredOrganizations.includes(
+            uo.USERORGANIZATIONID.ORGANIZATIONID.ORGANIZATIONCODE
+          )
+        );
+
+        if (filteredOrgs.length === 0) {
+          console.log(`Skipping user ${pemsUser.USERID.USERCODE}: No matching organizations`);
+          continue;
+        }
+
+        // Upsert user to database
+        await this.upsertUser(pemsUser, filteredOrgs);
+        syncedUsers.push(pemsUser.USERID.USERCODE);
+      }
+
+      cursorPosition = response.Result.ResultData.NEXTCURSORPOSITION;
+    } while (cursorPosition > 0);
+
+    return {
+      totalUsers: syncedUsers.length,
+      syncedUsers,
+      skippedCount: response.Result.ResultData.RECORDS - syncedUsers.length
+    };
+  }
+
+  private shouldSyncUser(pemsUser: any): boolean {
+    // Filter 1: Active users only
+    if (this.syncFilters.onlyActiveUsers && pemsUser.ISACTIVE !== '+') {
+      return false;
+    }
+
+    // Filter 2: Allowed user groups
+    if (this.syncFilters.allowedUserGroups.length > 0) {
+      if (!this.syncFilters.allowedUserGroups.includes(pemsUser.USERGROUP)) {
+        return false;
+      }
+    }
+
+    // Filter 3: Custom field filters
+    for (const filter of this.syncFilters.customFieldFilters) {
+      const fieldValue = pemsUser.StandardUserDefinedFields?.[filter.fieldName];
+      if (!filter.values.includes(fieldValue)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private async upsertUser(pemsUser: any, userOrgs: any[]): Promise<void> {
+    const userId = pemsUser.USERID.USERCODE;
+
+    // Upsert user
+    await prisma.user.upsert({
+      where: { externalId: userId },
+      update: {
+        username: userId,
+        email: pemsUser.EMAIL,
+        isActive: pemsUser.ISACTIVE === '+',
+        serviceStatus: pemsUser.ISACTIVE === '+' ? 'active' : 'suspended',
+        // Hybrid auth: No local password for pure PEMS users
+        passwordHash: null,
+        authProvider: 'pems',
+        externalId: userId
+      },
+      create: {
+        username: userId,
+        email: pemsUser.EMAIL,
+        passwordHash: null,
+        authProvider: 'pems',
+        externalId: userId,
+        isActive: pemsUser.ISACTIVE === '+',
+        serviceStatus: pemsUser.ISACTIVE === '+' ? 'active' : 'suspended'
+      }
+    });
+
+    // Upsert user-organization assignments
+    for (const userOrg of userOrgs) {
+      await prisma.userOrganization.upsert({
+        where: {
+          userId_organizationId: {
+            userId: user.id,
+            organizationId: orgId
+          }
+        },
+        update: {
+          assignmentSource: 'pems_sync',
+          externalRoleId: userOrg.USERORGANIZATIONID.LDAPROLEID?.ROLECODE,
+          isCustom: false // Mark as not custom (PEMS managed)
+        },
+        create: {
+          userId: user.id,
+          organizationId: orgId,
+          assignmentSource: 'pems_sync',
+          externalRoleId: userOrg.USERORGANIZATIONID.LDAPROLEID?.ROLECODE,
+          isCustom: false
+        }
+      });
+    }
+  }
+}
+```
+
+### Database Seeders
+
+**File**: `backend/prisma/seeds/pems-users.seed.ts`
+
+```typescript
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export async function seedPemsUsers() {
+  console.log('Seeding PEMS users (filtered)...');
+
+  // Seed only users that match sync criteria
+  const testUsers = [
+    {
+      username: 'PM001',
+      email: 'pm001@example.com',
+      externalId: 'PM001',
+      authProvider: 'pems',
+      passwordHash: null, // No local password (pure PEMS)
+      userGroup: 'PROJECT_MANAGERS',
+      udfChar01: 'Y' // PFA Access Flag
+    },
+    {
+      username: 'CE002',
+      email: 'ce002@example.com',
+      externalId: 'CE002',
+      authProvider: 'pems',
+      passwordHash: null,
+      userGroup: 'COST_ENGINEERS',
+      udfChar01: 'Y'
+    },
+    {
+      username: 'ADM003',
+      email: 'adm003@example.com',
+      externalId: 'ADM003',
+      authProvider: 'pems',
+      passwordHash: null,
+      userGroup: 'ADMINISTRATORS',
+      udfChar01: 'Y'
+    }
+  ];
+
+  for (const userData of testUsers) {
+    await prisma.user.upsert({
+      where: { externalId: userData.externalId },
+      update: userData,
+      create: userData
+    });
+  }
+
+  console.log(`Seeded ${testUsers.length} PEMS users`);
+}
+```
+
+### Validation & Testing
+
+**Test Scenarios**:
+
+1. **Filter Active Users Only**:
+   ```bash
+   # Should sync: User with ISACTIVE = '+'
+   # Should skip: User with ISACTIVE = '-'
+   ```
+
+2. **Filter by User Group**:
+   ```bash
+   # Should sync: PROJECT_MANAGERS, COST_ENGINEERS, ADMINISTRATORS
+   # Should skip: CONTRACTORS, EXTERNAL_USERS
+   ```
+
+3. **Filter by Custom Field**:
+   ```bash
+   # Should sync: UDFCHAR01 = 'Y' (PFA Access Flag)
+   # Should skip: UDFCHAR01 = 'N' or NULL
+   ```
+
+4. **Filter by Organization Assignment**:
+   ```bash
+   # Should sync: Users assigned to BECH, HOLNG, or RIO
+   # Should skip: Users only assigned to other organizations
+   ```
+
+### Deliverables
+
+- [ ] PEMS API credentials configured (reused from organization sync)
+- [ ] User sync filtering logic implemented
+- [ ] Database seeders created for test PEMS users
+- [ ] Sync criteria documented (organization, user group, custom fields)
+- [ ] Test script to verify filtering logic
+- [ ] Documentation: `docs/PEMS_USER_SYNC_FILTERING.md`
 
 ---
 
@@ -689,14 +1069,304 @@ router.post(
 );
 ```
 
+#### 2.4 API Server Authorization Middleware (ADR-006 Integration)
+
+**File**: `backend/src/middleware/requireApiServerPermission.ts`
+
+**Purpose**: Protect API server management endpoints with perm_ManageSettings and organization service status validation.
+
+**Implementation**:
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import { prisma } from '../config/database';
+import { ForbiddenException } from '../utils/exceptions';
+
+/**
+ * Middleware to check if user has perm_ManageSettings for the organization
+ * that owns the API server being accessed.
+ *
+ * Authorization Rules:
+ * - CREATE operations: Requires perm_ManageSettings on target organizationId
+ * - UPDATE/DELETE operations: Requires perm_ManageSettings on server's organization
+ * - TEST operations: Requires perm_Read only (read-only, no modifications)
+ * - Organization service status must be 'active' for management operations
+ * - Test operations blocked if organization is suspended
+ */
+export async function requireApiServerPermission(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const { user } = req; // From JWT auth middleware
+  const serverId = req.params.id || req.body.serverId;
+  const organizationId = req.body.organizationId;
+
+  // FOR CREATE OPERATIONS (POST /api/api-servers)
+  // Check permission on target organization from request body
+  if (req.method === 'POST' && organizationId) {
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId: user.id,
+        organizationId: organizationId,
+        perm_ManageSettings: true,
+      },
+    });
+
+    if (!userOrg) {
+      throw new ForbiddenException({
+        message: 'You don\'t have permission to manage this organization\'s API servers',
+        requiredPermission: 'perm_ManageSettings',
+        organizationId,
+        organizationCode: await getOrgCode(organizationId),
+      });
+    }
+
+    // Check organization service status
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { code: true, serviceStatus: true },
+    });
+
+    if (org.serviceStatus === 'suspended') {
+      throw new ForbiddenException({
+        message: 'Cannot manage API servers - Organization is suspended',
+        organizationId,
+        organizationCode: org.code,
+        serviceStatus: org.serviceStatus,
+        recommendation: 'Reactivate organization first',
+      });
+    }
+
+    return next();
+  }
+
+  // FOR UPDATE/DELETE/TEST OPERATIONS
+  // Check permission on server's organization
+  if (serverId) {
+    const server = await prisma.apiServer.findUnique({
+      where: { id: serverId },
+      include: { organization: true },
+    });
+
+    if (!server) {
+      return res.status(404).json({ error: 'API server not found' });
+    }
+
+    // Determine required permission based on operation
+    const isTestOperation = req.path.includes('/test');
+    const requiredPermission = isTestOperation ? 'perm_Read' : 'perm_ManageSettings';
+
+    // Check user has permission for this server's organization
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId: user.id,
+        organizationId: server.organizationId,
+        // Test operations only need perm_Read (any user can test)
+        // Management operations require perm_ManageSettings
+        ...(isTestOperation ? {} : { perm_ManageSettings: true }),
+      },
+    });
+
+    if (!userOrg) {
+      throw new ForbiddenException({
+        message: isTestOperation
+          ? 'You don\'t have access to this organization'
+          : 'Requires perm_ManageSettings permission',
+        requiredPermission,
+        organizationId: server.organizationId,
+        organizationCode: server.organization.code,
+      });
+    }
+
+    // Check organization status for all operations (including test)
+    if (server.organization.serviceStatus === 'suspended') {
+      throw new ForbiddenException({
+        message: isTestOperation
+          ? 'Cannot test API server - Organization is suspended'
+          : 'Cannot manage API servers - Organization is suspended',
+        organizationId: server.organizationId,
+        organizationCode: server.organization.code,
+        serviceStatus: server.organization.serviceStatus,
+        recommendation: 'Reactivate organization first',
+      });
+    }
+
+    return next();
+  }
+
+  // No serverId or organizationId provided
+  return res.status(400).json({ error: 'Missing serverId or organizationId' });
+}
+
+// Helper function to get organization code
+async function getOrgCode(organizationId: string): Promise<string> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { code: true },
+  });
+  return org?.code || 'UNKNOWN';
+}
+```
+
+**Error Response Specifications**:
+
+```typescript
+// 1. Permission Denied (missing perm_ManageSettings)
+HTTP 403 Forbidden
+{
+  "error": "PermissionDenied",
+  "message": "You don't have permission to manage this organization's API servers",
+  "requiredPermission": "perm_ManageSettings",
+  "organizationId": "clx123...",
+  "organizationCode": "HOLNG"
+}
+
+// 2. Organization Suspended
+HTTP 403 Forbidden
+{
+  "error": "OrganizationSuspended",
+  "message": "Cannot manage API servers - Organization is suspended",
+  "organizationId": "clx123...",
+  "organizationCode": "RIO",
+  "serviceStatus": "suspended",
+  "recommendation": "Reactivate organization first"
+}
+
+// 3. Cross-Organization Access Attempt
+HTTP 403 Forbidden
+{
+  "error": "CrossOrganizationAccess",
+  "message": "You don't have access to this organization's API servers",
+  "requestedOrganization": "HOLNG",
+  "yourOrganizations": ["RIO", "BECH"]
+}
+
+// 4. API Server Not Found
+HTTP 404 Not Found
+{
+  "error": "API server not found"
+}
+
+// 5. Missing Parameters
+HTTP 400 Bad Request
+{
+  "error": "Missing serverId or organizationId"
+}
+```
+
+**Integration with API Routes**:
+
+```typescript
+// File: backend/src/routes/apiServerRoutes.ts
+import { requireApiServerPermission } from '../middleware/requireApiServerPermission';
+
+// List API servers (filtered by user's organizations)
+router.get('/', requireAuth, apiServerController.list);
+
+// Create API server (requires perm_ManageSettings)
+router.post('/', requireAuth, requireApiServerPermission, apiServerController.create);
+
+// Update API server (requires perm_ManageSettings)
+router.patch('/:id', requireAuth, requireApiServerPermission, apiServerController.update);
+
+// Delete API server (requires perm_ManageSettings)
+router.delete('/:id', requireAuth, requireApiServerPermission, apiServerController.delete);
+
+// Test API server connection (requires perm_Read only)
+router.post('/:id/test', requireAuth, requireApiServerPermission, apiServerController.test);
+```
+
+**Key Authorization Rules**:
+
+1. **CREATE**: User must have `perm_ManageSettings` for the target organization (from request body)
+2. **UPDATE/DELETE**: User must have `perm_ManageSettings` for the server's organization
+3. **TEST**: User only needs `perm_Read` (any organization member can test connections)
+4. **Organization Status**: Must be 'active' for all operations (including test)
+5. **User Status**: Must be 'active' (enforced by parent `requireAuth` middleware)
+
+**Cascading Delete Documentation** (from ADR-006 schema):
+
+```prisma
+model ApiServer {
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model ApiEndpoint {
+  server     ApiServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+```
+
+**Cascade Chain**:
+```
+DELETE Organization (if isExternal=false)
+  ↓ onDelete: Cascade
+DELETE ApiServer(s) belonging to that organization
+  ↓ onDelete: Cascade
+DELETE ApiEndpoint(s) belonging to those servers
+```
+
+**Important Notes**:
+- External organizations (isExternal=true) cannot be deleted, so this cascade only applies to local organizations
+- API server deletion is automatic when parent organization is deleted
+- All API endpoints are automatically removed when their parent API server is deleted
+- No orphaned records possible due to Prisma's cascade enforcement
+
 ### Testing
 
 ```bash
 # Unit tests
 npm test -- authorize.test.ts
+npm test -- requireApiServerPermission.test.ts
 
 # Integration tests
 npm test -- api-authorization.test.ts
+npm test -- api-server-authorization.test.ts
+```
+
+**Test Scenarios**:
+
+```typescript
+// Test 1: CREATE with perm_ManageSettings - SUCCESS
+POST /api/api-servers
+Body: { organizationId: "clx_HOLNG", name: "New Server", ... }
+User: Has perm_ManageSettings for HOLNG
+Expected: 201 Created
+
+// Test 2: CREATE without perm_ManageSettings - FORBIDDEN
+POST /api/api-servers
+Body: { organizationId: "clx_HOLNG", ... }
+User: Has perm_Read only for HOLNG
+Expected: 403 Forbidden
+
+// Test 3: UPDATE/DELETE with perm_ManageSettings - SUCCESS
+PATCH /api/api-servers/:serverId
+User: Has perm_ManageSettings for server's organization
+Expected: 200 OK
+
+// Test 4: TEST with perm_Read - SUCCESS
+POST /api/api-servers/:serverId/test
+User: Has perm_Read for server's organization
+Expected: 200 OK
+
+// Test 5: Any operation on suspended organization - FORBIDDEN
+POST /api/api-servers/:serverId/test
+Organization: serviceStatus = 'suspended'
+Expected: 403 Forbidden
+
+// Test 6: Cross-organization access - FORBIDDEN
+PATCH /api/api-servers/:serverId
+Server belongs to: HOLNG
+User has access to: RIO, BECH (not HOLNG)
+Expected: 403 Forbidden
+
+// Test 7: Cascading delete verification
+DELETE /api/organizations/:orgId (isExternal=false)
+Expected:
+  - Organization deleted
+  - All ApiServer records for that org deleted
+  - All ApiEndpoint records for those servers deleted
+  - No orphaned records
 ```
 
 ---
@@ -1780,6 +2450,685 @@ export async function getPortfolioData(req: Request, res: Response) {
   res.json(portfolioData);
 }
 ```
+
+#### 5.9 API Server Management Endpoints (ADR-006 Integration)
+
+**Purpose**: Provide CRUD operations for API servers with multi-tenant access control and organization status validation.
+
+**File**: `backend/src/controllers/apiServerController.ts`
+
+**Implementation**:
+
+```typescript
+import { Router, Request, Response } from 'express';
+import { prisma } from '../config/database';
+import { requireAuth } from '../middleware/requireAuth';
+import { requireApiServerPermission } from '../middleware/requireApiServerPermission';
+import { OrganizationValidationService } from '../services/organizationValidation';
+import { NotFoundException, UnprocessableEntityException } from '../utils/exceptions';
+
+const router = Router();
+
+/**
+ * GET /api/api-servers
+ * List API servers filtered by user's accessible organizations
+ *
+ * Authorization: Any authenticated user
+ * Filtering: Only shows servers from organizations user has access to
+ */
+router.get('/', requireAuth, async (req: Request, res: Response) => {
+  const { user } = req;
+  const { organizationId } = req.query;
+
+  // Get all organizations user has access to
+  const userOrgs = await prisma.userOrganization.findMany({
+    where: { userId: user.id },
+    select: { organizationId: true },
+  });
+
+  const orgIds = userOrgs.map(uo => uo.organizationId);
+
+  // Filter by specific org if requested (must be one user has access to)
+  const whereClause = organizationId
+    ? { organizationId: { equals: organizationId as string, in: orgIds } }
+    : { organizationId: { in: orgIds } };
+
+  const servers = await prisma.apiServer.findMany({
+    where: whereClause,
+    include: {
+      organization: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          serviceStatus: true,
+          isExternal: true,
+        },
+      },
+      endpoints: {
+        select: {
+          id: true,
+          name: true,
+          method: true,
+          path: true,
+          isActive: true,
+        },
+      },
+    },
+    orderBy: [
+      { organization: { code: 'asc' } },
+      { name: 'asc' },
+    ],
+  });
+
+  res.json(servers);
+});
+
+/**
+ * POST /api/api-servers
+ * Create a new API server
+ *
+ * Authorization: perm_ManageSettings for target organization
+ * Validation: Organization must be active
+ */
+router.post('/', requireAuth, requireApiServerPermission, async (req: Request, res: Response) => {
+  const { organizationId, name, baseUrl, authType, credentials, description } = req.body;
+
+  // Validate organization is active (throws if suspended/archived)
+  await OrganizationValidationService.validateOrgActive(
+    organizationId,
+    'create API server'
+  );
+
+  // Create server with encrypted credentials
+  const server = await prisma.apiServer.create({
+    data: {
+      organizationId,
+      name,
+      baseUrl,
+      authType,
+      credentials, // Will be encrypted by Prisma middleware
+      description,
+    },
+    include: {
+      organization: {
+        select: { code: true, name: true },
+      },
+    },
+  });
+
+  // Audit log
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user.id,
+      organizationId,
+      action: 'api_server.created',
+      entityType: 'ApiServer',
+      entityId: server.id,
+      metadata: { serverName: name, baseUrl },
+    },
+  });
+
+  res.status(201).json(server);
+});
+
+/**
+ * PATCH /api/api-servers/:id
+ * Update an existing API server
+ *
+ * Authorization: perm_ManageSettings for server's organization
+ * Validation: Organization must be active
+ */
+router.patch('/:id', requireAuth, requireApiServerPermission, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, baseUrl, authType, credentials, description, isActive } = req.body;
+
+  const existingServer = await prisma.apiServer.findUnique({
+    where: { id },
+    include: { organization: true },
+  });
+
+  if (!existingServer) {
+    throw new NotFoundException('API server not found');
+  }
+
+  // Validate organization is active
+  await OrganizationValidationService.validateOrgActive(
+    existingServer.organizationId,
+    'update API server'
+  );
+
+  // Update server
+  const updatedServer = await prisma.apiServer.update({
+    where: { id },
+    data: {
+      name,
+      baseUrl,
+      authType,
+      credentials, // Will be encrypted if provided
+      description,
+      isActive,
+    },
+    include: {
+      organization: {
+        select: { code: true, name: true },
+      },
+    },
+  });
+
+  // Audit log
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user.id,
+      organizationId: existingServer.organizationId,
+      action: 'api_server.updated',
+      entityType: 'ApiServer',
+      entityId: id,
+      metadata: { changes: req.body },
+    },
+  });
+
+  res.json(updatedServer);
+});
+
+/**
+ * DELETE /api/api-servers/:id
+ * Delete an API server (cascades to endpoints)
+ *
+ * Authorization: perm_ManageSettings for server's organization
+ * Cascade: All endpoints associated with this server will be deleted
+ */
+router.delete('/:id', requireAuth, requireApiServerPermission, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const existingServer = await prisma.apiServer.findUnique({
+    where: { id },
+    include: {
+      organization: true,
+      endpoints: { select: { id: true } },
+    },
+  });
+
+  if (!existingServer) {
+    throw new NotFoundException('API server not found');
+  }
+
+  // Note: Organization status validation not required for delete
+  // Admin may need to delete servers from suspended orgs
+
+  const endpointCount = existingServer.endpoints.length;
+
+  // Cascading delete (endpoints deleted automatically)
+  await prisma.apiServer.delete({
+    where: { id },
+  });
+
+  // Audit log
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user.id,
+      organizationId: existingServer.organizationId,
+      action: 'api_server.deleted',
+      entityType: 'ApiServer',
+      entityId: id,
+      metadata: {
+        serverName: existingServer.name,
+        baseUrl: existingServer.baseUrl,
+        endpointsDeleted: endpointCount,
+      },
+    },
+  });
+
+  res.json({
+    message: 'API server deleted',
+    endpointsDeleted: endpointCount,
+  });
+});
+
+/**
+ * POST /api/api-servers/:id/test
+ * Test API server connection
+ *
+ * Authorization: perm_Read (any organization member can test)
+ * Note: Does not modify data, read-only operation
+ */
+router.post('/:id/test', requireAuth, requireApiServerPermission, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const server = await prisma.apiServer.findUnique({
+    where: { id },
+    include: { organization: true },
+  });
+
+  if (!server) {
+    throw new NotFoundException('API server not found');
+  }
+
+  // Test connection logic (implement in separate service)
+  try {
+    const testResult = await testApiConnection(server);
+
+    // Log successful test
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: server.organizationId,
+        action: 'api_server.tested',
+        entityType: 'ApiServer',
+        entityId: id,
+        metadata: {
+          result: 'success',
+          responseTime: testResult.responseTimeMs,
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      ...testResult,
+    });
+  } catch (error) {
+    // Log failed test
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: server.organizationId,
+        action: 'api_server.test_failed',
+        entityType: 'ApiServer',
+        entityId: id,
+        metadata: {
+          error: error.message,
+        },
+      },
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+export default router;
+
+// Helper function (implement in separate service file)
+async function testApiConnection(server: any) {
+  // Implement actual connection test logic here
+  // This is a placeholder
+  return {
+    responseTimeMs: 150,
+    statusCode: 200,
+    message: 'Connection successful',
+  };
+}
+```
+
+**API Route Registration**:
+
+```typescript
+// File: backend/src/routes/index.ts
+import apiServerRoutes from './apiServerRoutes';
+
+app.use('/api/api-servers', apiServerRoutes);
+```
+
+**Key Features**:
+
+1. **Multi-Tenant Filtering**: GET endpoint only returns servers from user's organizations
+2. **Permission Enforcement**: CREATE/UPDATE/DELETE require `perm_ManageSettings`
+3. **Read-Only Testing**: TEST endpoint only requires `perm_Read` (any member can test)
+4. **Organization Validation**: Active status checked for CREATE/UPDATE (not DELETE)
+5. **Cascading Delete**: Deleting server automatically removes all endpoints
+6. **Audit Logging**: All operations logged with user, organization, and metadata
+7. **Error Handling**: Proper 404, 403, 500 responses with descriptive messages
+
+**Database Queries**:
+
+```typescript
+// Efficient query with relationship filtering
+const servers = await prisma.apiServer.findMany({
+  where: {
+    organizationId: { in: userOrgIds }, // Multi-tenant filter
+  },
+  include: {
+    organization: { select: { code: true, name: true, serviceStatus: true } },
+    endpoints: { select: { id: true, name: true, method: true, path: true } },
+  },
+});
+
+// Cascading delete handled by Prisma onDelete: Cascade
+await prisma.apiServer.delete({ where: { id } });
+// Automatically deletes all ApiEndpoint records with serverId = id
+```
+
+#### 5.10 Organization Status Validation Service (ADR-006 Integration)
+
+**Purpose**: Centralized service for validating organization active status and user permissions before API server operations.
+
+**File**: `backend/src/services/organizationValidation.ts`
+
+**Implementation**:
+
+```typescript
+import { prisma } from '../config/database';
+import { ForbiddenException, NotFoundException } from '../utils/exceptions';
+
+export class OrganizationValidationService {
+  /**
+   * Validates organization is in 'active' status for management operations
+   *
+   * @param organizationId - Organization ID to validate
+   * @param operation - Description of operation being attempted (for error message)
+   * @throws NotFoundException if organization doesn't exist
+   * @throws ForbiddenException if organization is suspended/archived
+   * @returns Organization record if validation passes
+   */
+  static async validateOrgActive(organizationId: string, operation: string) {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        serviceStatus: true,
+        isActive: true,
+      },
+    });
+
+    if (!org) {
+      throw new NotFoundException({
+        message: 'Organization not found',
+        organizationId,
+      });
+    }
+
+    if (!org.isActive || org.serviceStatus !== 'active') {
+      throw new ForbiddenException({
+        message: `Cannot ${operation} - Organization is ${org.serviceStatus}`,
+        organizationCode: org.code,
+        organizationName: org.name,
+        serviceStatus: org.serviceStatus,
+        recommendation: this.getRecommendation(org.serviceStatus),
+      });
+    }
+
+    return org;
+  }
+
+  /**
+   * Checks if user has specific permission for organization
+   *
+   * @param userId - User ID to check
+   * @param organizationId - Organization ID to check access for
+   * @param permission - Permission field name (e.g., 'perm_ManageSettings')
+   * @returns boolean - True if user has the permission
+   */
+  static async checkUserOrgPermission(
+    userId: string,
+    organizationId: string,
+    permission: string
+  ): Promise<boolean> {
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId,
+        organizationId,
+        isActive: true,
+        [permission]: true,
+      },
+    });
+
+    return !!userOrg;
+  }
+
+  /**
+   * Gets all organizations user has specific permission for
+   *
+   * @param userId - User ID
+   * @param permission - Permission field name
+   * @returns Array of organization IDs user has permission for
+   */
+  static async getUserOrganizationsWithPermission(
+    userId: string,
+    permission: string
+  ): Promise<string[]> {
+    const userOrgs = await prisma.userOrganization.findMany({
+      where: {
+        userId,
+        isActive: true,
+        [permission]: true,
+      },
+      select: { organizationId: true },
+    });
+
+    return userOrgs.map(uo => uo.organizationId);
+  }
+
+  /**
+   * Validates user has permission for organization
+   *
+   * @param userId - User ID
+   * @param organizationId - Organization ID
+   * @param permission - Permission field name
+   * @param operation - Operation description for error message
+   * @throws ForbiddenException if user lacks permission
+   */
+  static async validateUserPermission(
+    userId: string,
+    organizationId: string,
+    permission: string,
+    operation: string
+  ): Promise<void> {
+    const hasPermission = await this.checkUserOrgPermission(
+      userId,
+      organizationId,
+      permission
+    );
+
+    if (!hasPermission) {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { code: true },
+      });
+
+      throw new ForbiddenException({
+        message: `Cannot ${operation} - Missing required permission`,
+        requiredPermission: permission,
+        organizationId,
+        organizationCode: org?.code || 'UNKNOWN',
+      });
+    }
+  }
+
+  /**
+   * Validates both organization status AND user permission
+   *
+   * @param userId - User ID
+   * @param organizationId - Organization ID
+   * @param permission - Permission field name
+   * @param operation - Operation description
+   * @throws NotFoundException if org doesn't exist
+   * @throws ForbiddenException if org suspended or user lacks permission
+   */
+  static async validateOrgAndPermission(
+    userId: string,
+    organizationId: string,
+    permission: string,
+    operation: string
+  ): Promise<void> {
+    // First validate org is active
+    await this.validateOrgActive(organizationId, operation);
+
+    // Then validate user has permission
+    await this.validateUserPermission(userId, organizationId, permission, operation);
+  }
+
+  /**
+   * Gets recommendation message based on organization status
+   */
+  private static getRecommendation(serviceStatus: string): string {
+    switch (serviceStatus) {
+      case 'suspended':
+        return 'Contact administrator to reactivate organization';
+      case 'archived':
+        return 'Organization is archived and cannot be modified';
+      case 'pending':
+        return 'Wait for organization activation to complete';
+      default:
+        return 'Contact administrator for assistance';
+    }
+  }
+
+  /**
+   * Bulk validation: Check if user has permission for multiple organizations
+   *
+   * @param userId - User ID
+   * @param organizationIds - Array of organization IDs
+   * @param permission - Permission field name
+   * @returns Map of organizationId -> boolean (has permission)
+   */
+  static async checkUserPermissionsForOrgs(
+    userId: string,
+    organizationIds: string[],
+    permission: string
+  ): Promise<Map<string, boolean>> {
+    const userOrgs = await prisma.userOrganization.findMany({
+      where: {
+        userId,
+        organizationId: { in: organizationIds },
+        isActive: true,
+      },
+      select: {
+        organizationId: true,
+        [permission]: true,
+      },
+    });
+
+    const permissionMap = new Map<string, boolean>();
+    organizationIds.forEach(orgId => {
+      const userOrg = userOrgs.find(uo => uo.organizationId === orgId);
+      permissionMap.set(orgId, userOrg ? userOrg[permission] : false);
+    });
+
+    return permissionMap;
+  }
+}
+```
+
+**Usage Examples**:
+
+```typescript
+// Example 1: Validate org before creating API server
+import { OrganizationValidationService } from '../services/organizationValidation';
+
+async function createApiServer(req, res) {
+  const { organizationId, name, baseUrl } = req.body;
+
+  // Throws ForbiddenException if org is suspended
+  await OrganizationValidationService.validateOrgActive(
+    organizationId,
+    'create API server'
+  );
+
+  const server = await prisma.apiServer.create({ data: { ... } });
+  res.json(server);
+}
+
+// Example 2: Check user permission before operation
+async function updateApiServer(req, res) {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  const server = await prisma.apiServer.findUnique({ where: { id } });
+
+  // Throws ForbiddenException if user lacks perm_ManageSettings
+  await OrganizationValidationService.validateUserPermission(
+    userId,
+    server.organizationId,
+    'perm_ManageSettings',
+    'update API server'
+  );
+
+  // Proceed with update...
+}
+
+// Example 3: Combined validation (org + user)
+async function performSensitiveOperation(req, res) {
+  const { organizationId } = req.body;
+  const userId = req.user.id;
+
+  // Single call validates both org status and user permission
+  await OrganizationValidationService.validateOrgAndPermission(
+    userId,
+    organizationId,
+    'perm_ManageSettings',
+    'perform sensitive operation'
+  );
+
+  // Safe to proceed...
+}
+
+// Example 4: Bulk permission check
+async function listAccessibleServers(req, res) {
+  const userId = req.user.id;
+  const allOrgIds = ['org1', 'org2', 'org3'];
+
+  const permissionMap = await OrganizationValidationService.checkUserPermissionsForOrgs(
+    userId,
+    allOrgIds,
+    'perm_Read'
+  );
+
+  // Filter to only orgs user has access to
+  const accessibleOrgIds = Array.from(permissionMap.entries())
+    .filter(([_, hasPermission]) => hasPermission)
+    .map(([orgId, _]) => orgId);
+
+  const servers = await prisma.apiServer.findMany({
+    where: { organizationId: { in: accessibleOrgIds } },
+  });
+
+  res.json(servers);
+}
+```
+
+**Error Response Examples**:
+
+```typescript
+// Organization not found
+{
+  "error": "NotFound",
+  "message": "Organization not found",
+  "organizationId": "clx_invalid"
+}
+
+// Organization suspended
+{
+  "error": "Forbidden",
+  "message": "Cannot create API server - Organization is suspended",
+  "organizationCode": "RIO",
+  "organizationName": "RIO Project",
+  "serviceStatus": "suspended",
+  "recommendation": "Contact administrator to reactivate organization"
+}
+
+// User lacks permission
+{
+  "error": "Forbidden",
+  "message": "Cannot update API server - Missing required permission",
+  "requiredPermission": "perm_ManageSettings",
+  "organizationId": "clx_HOLNG",
+  "organizationCode": "HOLNG"
+}
+```
+
+**Benefits**:
+
+1. **Centralized Logic**: All organization/permission validation in one place
+2. **Reusability**: Used across API server, user, and organization controllers
+3. **Consistent Errors**: Standardized error responses with helpful messages
+4. **Performance**: Bulk validation reduces database queries
+5. **Maintainability**: Single source of truth for validation rules
+6. **Type Safety**: TypeScript ensures correct permission field names
 
 ---
 

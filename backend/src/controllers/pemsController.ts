@@ -9,24 +9,26 @@ import { getPrismaClient } from '../config/database';
 import { PemsApiService } from '../services/pems/PemsApiService';
 import { PemsSyncService } from '../services/pems/PemsSyncService';
 import { logger } from '../utils/logger';
+import { handleControllerError } from '../utils/errorHandling';
 
 const prisma = getPrismaClient();
 
 /**
  * Get all PEMS API configurations for an organization
  */
-export const getPemsConfigs = async (req: Request, res: Response) => {
+export const getPemsConfigs = async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.query;
 
     if (!organizationId || typeof organizationId !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'BAD_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
-    const configs = await prisma.apiConfiguration.findMany({
+    const configs = await prisma.api_configurations.findMany({
       where: {
         organizationId,
         usage: 'PFA'
@@ -59,32 +61,34 @@ export const getPemsConfigs = async (req: Request, res: Response) => {
 /**
  * Test PEMS API connection
  */
-export const testPemsConnection = async (req: Request, res: Response) => {
+export const testPemsConnection = async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.body;
 
     if (!organizationId) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'BAD_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
     // Get organization code
-    const org = await prisma.organization.findUnique({
+    const org = await prisma.organizations.findUnique({
       where: { id: organizationId },
       select: { code: true }
     });
 
     if (!org) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'Organization not found'
       });
+      return;
     }
 
     // Get API configuration to use same credentials as sync
-    const apiConfig = await prisma.apiConfiguration.findFirst({
+    const apiConfig = await prisma.api_configurations.findFirst({
       where: {
         usage: 'PEMS_PFA_READ',
         operationType: 'read'
@@ -92,10 +96,11 @@ export const testPemsConnection = async (req: Request, res: Response) => {
     });
 
     if (!apiConfig) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'PEMS PFA Read API configuration not found'
       });
+      return;
     }
 
     const pemsSync = new PemsSyncService();
@@ -107,7 +112,7 @@ export const testPemsConnection = async (req: Request, res: Response) => {
       const latencyMs = Date.now() - startTime;
 
       // Update config status
-      await prisma.apiConfiguration.updateMany({
+      await prisma.api_configurations.updateMany({
         where: {
           id: apiConfig.id
         },
@@ -125,26 +130,8 @@ export const testPemsConnection = async (req: Request, res: Response) => {
         latencyMs,
         message: `Successfully connected to PEMS API. Retrieved ${result.totalRecords} test records.`
       });
-    } catch (error: any) {
-      // Update config with error
-      await prisma.apiConfiguration.updateMany({
-        where: {
-          organizationId,
-          usage: 'PFA',
-          operationType: 'read'
-        },
-        data: {
-          status: 'error',
-          lastChecked: new Date(),
-          lastError: error.message
-        }
-      });
-
-      res.status(500).json({
-        success: false,
-        status: 'error',
-        message: error.message || 'Connection test failed'
-      });
+    } catch (error: unknown) {
+      handleControllerError(error, res, 'PemsController.testPemsConnection');
     }
   } catch (error) {
     logger.error('Error testing PEMS connection:', error);
@@ -158,33 +145,36 @@ export const testPemsConnection = async (req: Request, res: Response) => {
 /**
  * Trigger PEMS data synchronization
  */
-export const syncPemsData = async (req: Request, res: Response) => {
+export const syncPemsData = async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId, syncType = 'full' } = req.body;
 
     if (!organizationId) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'BAD_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
     // Get organization
-    const org = await prisma.organization.findUnique({
+    const org = await prisma.organizations.findUnique({
       where: { id: organizationId },
       select: { code: true }
     });
 
     if (!org) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'Organization not found'
       });
+      return;
     }
 
     // Create sync log entry
-    const syncLog = await prisma.syncLog.create({
+    const syncLog = await prisma.sync_logs.create({
       data: {
+        id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         organizationId,
         syncType,
         status: 'in_progress',
@@ -215,19 +205,20 @@ export const syncPemsData = async (req: Request, res: Response) => {
 /**
  * Get sync status
  */
-export const getSyncStatus = async (req: Request, res: Response) => {
+export const getSyncStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { syncId } = req.params;
 
-    const syncLog = await prisma.syncLog.findUnique({
+    const syncLog = await prisma.sync_logs.findUnique({
       where: { id: syncId }
     });
 
     if (!syncLog) {
-      return res.status(404).json({
+      res.status(404).json({
         error: 'NOT_FOUND',
         message: 'Sync log not found'
       });
+      return;
     }
 
     res.json({
@@ -254,19 +245,20 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 /**
  * Get sync history for an organization
  */
-export const getSyncHistory = async (req: Request, res: Response) => {
+export const getSyncHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.query;
     const limit = parseInt(req.query.limit as string) || 10;
 
     if (!organizationId || typeof organizationId !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'BAD_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
-    const history = await prisma.syncLog.findMany({
+    const history = await prisma.sync_logs.findMany({
       where: { organizationId },
       orderBy: { createdAt: 'desc' },
       take: limit
@@ -316,7 +308,7 @@ async function performSync(
         const pfaId = record.PFA_ID;
 
         // Check if record exists
-        const existing = await prisma.pfaRecord.findUnique({
+        const existing = await prisma.pfa_records.findUnique({
           where: {
             organizationId_pfaId: {
               organizationId,
@@ -357,17 +349,21 @@ async function performSync(
 
         if (existing) {
           // Update existing record
-          await prisma.pfaRecord.update({
+          await prisma.pfa_records.update({
             where: { id: existing.id },
-            data: pfaData
+            data: {
+              ...pfaData,
+              updatedAt: new Date()
+            }
           });
           recordsUpdated++;
         } else {
           // Insert new record
-          await prisma.pfaRecord.create({
+          await prisma.pfa_records.create({
             data: {
               id: `pfa-${organizationId}-${pfaId}`,
-              ...pfaData
+              ...pfaData,
+              updatedAt: new Date()
             }
           });
           recordsInserted++;
@@ -375,7 +371,7 @@ async function performSync(
       }
 
       // Update progress
-      await prisma.syncLog.update({
+      await prisma.sync_logs.update({
         where: { id: syncLogId },
         data: {
           recordsProcessed: i + batch.length,
@@ -388,7 +384,7 @@ async function performSync(
     const durationMs = Date.now() - startTime;
 
     // Mark sync as complete
-    await prisma.syncLog.update({
+    await prisma.sync_logs.update({
       where: { id: syncLogId },
       data: {
         status: 'success',
@@ -400,22 +396,14 @@ async function performSync(
     });
 
     logger.info(`Sync completed successfully in ${durationMs}ms`);
-  } catch (error: any) {
-    const durationMs = Date.now() - startTime;
-
-    // Mark sync as failed
-    await prisma.syncLog.update({
+  } catch (error: unknown) {
+    logger.error('Sync failed:', error);
+    await prisma.sync_logs.update({
       where: { id: syncLogId },
       data: {
-        status: 'error',
-        errorMessage: error.message,
-        durationMs,
-        recordsProcessed,
-        recordsInserted,
-        recordsUpdated
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
       }
     });
-
-    logger.error('Sync failed:', error);
   }
 }

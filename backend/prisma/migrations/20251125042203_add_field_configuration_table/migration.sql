@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "field_configurations" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "organizationId" TEXT,
     "name" TEXT NOT NULL,
     "description" TEXT,
@@ -10,8 +10,10 @@ CREATE TABLE "field_configurations" (
     "dateFormat" TEXT NOT NULL DEFAULT 'YYYY-MM-DD',
     "delimiter" TEXT NOT NULL DEFAULT ',',
     "encoding" TEXT NOT NULL DEFAULT 'UTF-8',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "field_configurations_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "field_configurations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

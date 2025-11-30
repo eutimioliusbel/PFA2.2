@@ -99,7 +99,6 @@ export class PemsSyncWorker {
       modificationsCount: modifications.length
     });
 
-    // TODO: Phase 4 Implementation
     // 1. Get PEMS Write API configuration
     // 2. Transform modifications to PEMS format
     // 3. Batch POST to PEMS Write API
@@ -110,8 +109,9 @@ export class PemsSyncWorker {
     const syncId = `write-sync-${Date.now()}`;
 
     // Create placeholder sync log
-    await prisma.pfaSyncLog.create({
+    await prisma.pfa_sync_log.create({
       data: {
+        id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         organizationId,
         syncType: 'manual',
         syncDirection: 'write',
@@ -187,7 +187,7 @@ export class PemsSyncWorker {
   private async getOrganizationsToSync(specificOrgId?: string): Promise<Array<{ id: string; code: string }>> {
     if (specificOrgId) {
       // Sync specific organization
-      const org = await prisma.organization.findUnique({
+      const org = await prisma.organizations.findUnique({
         where: { id: specificOrgId },
         select: { id: true, code: true }
       });
@@ -196,7 +196,7 @@ export class PemsSyncWorker {
 
     if (this.config.organizations.length > 0) {
       // Sync configured organizations
-      return await prisma.organization.findMany({
+      return await prisma.organizations.findMany({
         where: {
           code: { in: this.config.organizations },
           isActive: true
@@ -206,7 +206,7 @@ export class PemsSyncWorker {
     }
 
     // Sync all active organizations
-    return await prisma.organization.findMany({
+    return await prisma.organizations.findMany({
       where: { isActive: true },
       select: { id: true, code: true }
     });
@@ -230,8 +230,9 @@ export class PemsSyncWorker {
     });
 
     // Create sync log entry
-    const syncLog = await prisma.pfaSyncLog.create({
+    const syncLog = await prisma.pfa_sync_log.create({
       data: {
+        id: syncId,
         organizationId,
         syncType: 'incremental',
         syncDirection: 'read',
@@ -247,7 +248,7 @@ export class PemsSyncWorker {
 
       if (!apiConfig) {
         logger.warn(`[PemsSyncWorker] No PEMS Read API configured for ${organizationCode}, skipping`);
-        await prisma.pfaSyncLog.update({
+        await prisma.pfa_sync_log.update({
           where: { id: syncLog.id },
           data: {
             status: 'failed',
@@ -269,7 +270,7 @@ export class PemsSyncWorker {
 
       // Update sync log with results
       const completedAt = new Date();
-      await prisma.pfaSyncLog.update({
+      await prisma.pfa_sync_log.update({
         where: { id: syncLog.id },
         data: {
           status: progress.status === 'completed' ? 'completed' : 'failed',
@@ -287,7 +288,7 @@ export class PemsSyncWorker {
       // Update API configuration sync tracking
       if (progress.status === 'completed') {
         const isFirstSync = !apiConfig.firstSyncAt;
-        await prisma.apiConfiguration.update({
+        await prisma.api_configurations.update({
           where: { id: apiConfig.id },
           data: {
             firstSyncAt: isFirstSync ? completedAt : apiConfig.firstSyncAt,
@@ -318,7 +319,7 @@ export class PemsSyncWorker {
       logger.error(`[PemsSyncWorker] Failed to sync ${organizationCode}:`, error);
 
       // Update sync log with error
-      await prisma.pfaSyncLog.update({
+      await prisma.pfa_sync_log.update({
         where: { id: syncLog.id },
         data: {
           status: 'failed',
@@ -338,7 +339,7 @@ export class PemsSyncWorker {
    */
   private async getPemsReadConfig(organizationId: string): Promise<any> {
     // First check for global PEMS Read API
-    const globalConfig = await prisma.apiConfiguration.findFirst({
+    const globalConfig = await prisma.api_configurations.findFirst({
       where: {
         organizationId: null,
         usage: 'PEMS_PFA',
@@ -351,7 +352,7 @@ export class PemsSyncWorker {
     }
 
     // Fallback to org-specific config
-    return await prisma.apiConfiguration.findFirst({
+    return await prisma.api_configurations.findFirst({
       where: {
         organizationId,
         usage: 'PEMS_PFA',

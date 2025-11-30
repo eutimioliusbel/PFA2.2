@@ -1,18 +1,20 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import { JWTPayload, AuthRequest } from '../types/auth';
 
-export interface JwtPayload {
+// Legacy JWT payload for backward compatibility
+// New code should use JWTPayload from types/auth.ts
+export interface LegacyJwtPayload {
   userId: string;
   username: string;
   role: string;
   organizationIds: string[];
 }
 
-export interface AuthRequest extends Request {
-  user?: JwtPayload;
-}
+// Re-export AuthRequest for backward compatibility
+export type { AuthRequest };
 
 /**
  * Verify JWT token and attach user to request
@@ -33,7 +35,7 @@ export const authenticateJWT = (
     const token = authHeader.substring(7); // Remove 'Bearer '
 
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+      const decoded = jwt.verify(token, env.JWT_SECRET) as JWTPayload;
       req.user = decoded;
       next();
     } catch (error) {
@@ -53,6 +55,8 @@ export const authenticateJWT = (
 
 /**
  * Require admin role
+ * Note: This checks the legacy 'role' field on User model
+ * For granular permissions, use requirePermission() instead
  */
 export const requireAdmin = (
   req: AuthRequest,
@@ -64,7 +68,12 @@ export const requireAdmin = (
     return;
   }
 
-  if (req.user.role !== 'admin') {
+  // Check if user has perm_Impersonate in ANY organization (de facto admin)
+  const hasAdminPermission = req.user.organizations.some(
+    org => org.permissions.perm_Impersonate || org.permissions.perm_ManageUsers
+  );
+
+  if (!hasAdminPermission) {
     res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required' });
     return;
   }
@@ -73,7 +82,11 @@ export const requireAdmin = (
 };
 
 /**
- * Require organization access
+ * Require organization access (basic check)
+ * For permission-specific checks, use requirePermission() instead
+ *
+ * @param orgIdParam - Parameter name containing organization ID
+ * @returns Express middleware function
  */
 export const requireOrgAccess = (orgIdParam: string = 'orgId') => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -89,17 +102,16 @@ export const requireOrgAccess = (orgIdParam: string = 'orgId') => {
       return;
     }
 
-    // Admin has access to all orgs
-    if (req.user.role === 'admin') {
-      next();
-      return;
-    }
-
     // Check if user has access to this organization
-    if (!req.user.organizationIds.includes(requestedOrgId as string)) {
+    const hasAccess = req.user.organizations.some(org => org.organizationId === requestedOrgId);
+
+    if (!hasAccess) {
       res.status(403).json({ error: 'FORBIDDEN', message: 'No access to this organization' });
       return;
     }
+
+    // Attach organizationId to request for downstream use
+    req.organizationId = requestedOrgId as string;
 
     next();
   };

@@ -6,6 +6,9 @@
  * - POST /api/sync/trigger - Manually trigger a sync for specific org
  * - GET /api/sync/status - Get sync status and recent logs
  * - GET /api/sync/worker-status - Get worker status (running, next run time)
+ * - GET /api/sync/health - Get sync health statistics (Phase 3, Task 3.3)
+ * - GET /api/sync/health/skip-reasons - Get skip reason summary (Phase 3, Task 3.3)
+ * - GET /api/sync/health/:organizationId/history - Get org sync history (Phase 3, Task 3.3)
  */
 
 import { Router, Request, Response } from 'express';
@@ -13,6 +16,11 @@ import { authenticateJWT } from '../middleware/auth';
 import { getWorkerInstance } from '../workers/PemsSyncWorker';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import {
+  getSyncHealthStats,
+  getOrganizationSyncHistory,
+  getSkipReasonSummary
+} from '../controllers/syncStatsController';
 
 const router = Router();
 
@@ -32,56 +40,60 @@ const router = Router();
  *   message: string
  * }
  */
-router.post('/trigger', authenticateJWT, async (req: Request, res: Response) => {
+router.post('/trigger', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
   try {
     const { organizationId } = req.body;
 
     if (!organizationId) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'INVALID_REQUEST',
         message: 'organizationId is required'
       });
+      return;
     }
 
     // Verify organization exists (try by ID first, then by code for legacy compatibility)
-    let organization = await prisma.organization.findUnique({
+    let organization = await prisma.organizations.findUnique({
       where: { id: organizationId }
     });
 
     if (!organization) {
       // Try by code (for legacy frontend that uses code as id)
-      organization = await prisma.organization.findUnique({
+      organization = await prisma.organizations.findUnique({
         where: { code: organizationId }
       });
     }
 
     if (!organization) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'NOT_FOUND',
         message: 'Organization not found'
       });
+      return;
     }
 
     // Get worker instance
     const worker = getWorkerInstance();
 
     if (!worker) {
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         error: 'WORKER_NOT_INITIALIZED',
         message: 'Sync worker is not initialized'
       });
+      return;
     }
 
     // Check if sync is already running
     if (worker.isCurrentlyRunning()) {
-      return res.status(409).json({
+      res.status(409).json({
         success: false,
         error: 'SYNC_IN_PROGRESS',
         message: 'A sync operation is already in progress. Please wait for it to complete.'
       });
+      return;
     }
 
     // Trigger manual sync (use actual UUID id, not code)
@@ -141,29 +153,29 @@ router.get('/status', authenticateJWT, async (req: Request, res: Response) => {
     }
 
     // Get recent sync logs
-    const logs = await prisma.pfaSyncLog.findMany({
+    const logs = await prisma.pfa_sync_log.findMany({
       where,
       orderBy: { startedAt: 'desc' },
       take: limitNum,
       include: {
-        organization: {
+        organizations: {
           select: { code: true, name: true }
         },
-        triggeredByUser: {
+        users: {
           select: { username: true }
         }
       }
     });
 
     // Get summary statistics
-    const totalSyncs = await prisma.pfaSyncLog.count({ where });
-    const successfulSyncs = await prisma.pfaSyncLog.count({
+    const totalSyncs = await prisma.pfa_sync_log.count({ where });
+    const successfulSyncs = await prisma.pfa_sync_log.count({
       where: { ...where, status: 'completed' }
     });
-    const failedSyncs = await prisma.pfaSyncLog.count({
+    const failedSyncs = await prisma.pfa_sync_log.count({
       where: { ...where, status: 'failed' }
     });
-    const lastSyncLog = await prisma.pfaSyncLog.findFirst({
+    const lastSyncLog = await prisma.pfa_sync_log.findFirst({
       where,
       orderBy: { startedAt: 'desc' }
     });
@@ -173,8 +185,8 @@ router.get('/status', authenticateJWT, async (req: Request, res: Response) => {
       logs: logs.map((log: any) => ({
         id: log.id,
         organizationId: log.organizationId,
-        organizationCode: log.organization.code,
-        organizationName: log.organization.name,
+        organizationCode: log.organizations.code,
+        organizationName: log.organizations.name,
         syncType: log.syncType,
         syncDirection: log.syncDirection,
         status: log.status,
@@ -187,7 +199,7 @@ router.get('/status', authenticateJWT, async (req: Request, res: Response) => {
         completedAt: log.completedAt,
         durationMs: log.durationMs,
         errorMessage: log.errorMessage,
-        triggeredBy: log.triggeredByUser?.username || 'system'
+        triggeredBy: log.users?.username || 'system'
       })),
       summary: {
         totalSyncs,
@@ -221,12 +233,12 @@ router.get('/status', authenticateJWT, async (req: Request, res: Response) => {
  *   }
  * }
  */
-router.get('/worker-status', authenticateJWT, async (req: Request, res: Response) => {
+router.get('/worker-status', authenticateJWT, async (_req: Request, res: Response): Promise<void> => {
   try {
     const worker = getWorkerInstance();
 
     if (!worker) {
-      return res.json({
+      res.json({
         success: true,
         worker: {
           enabled: false,
@@ -234,6 +246,7 @@ router.get('/worker-status', authenticateJWT, async (req: Request, res: Response
           nextRun: null
         }
       });
+      return;
     }
 
     const isRunning = worker.isCurrentlyRunning();
@@ -257,5 +270,27 @@ router.get('/worker-status', authenticateJWT, async (req: Request, res: Response
     });
   }
 });
+
+/**
+ * GET /api/sync/health
+ * Get sync health statistics for all organizations
+ * Phase 3, Task 3.3 - Sync Health Dashboard
+ */
+router.get('/health', authenticateJWT, getSyncHealthStats);
+
+/**
+ * GET /api/sync/health/skip-reasons
+ * Get skip reason summary across all organizations
+ * Phase 3, Task 3.3 - Sync Health Dashboard
+ * IMPORTANT: This route must be before /:organizationId/history to avoid route conflict
+ */
+router.get('/health/skip-reasons', authenticateJWT, getSkipReasonSummary);
+
+/**
+ * GET /api/sync/health/:organizationId/history
+ * Get detailed sync history for a specific organization
+ * Phase 3, Task 3.3 - Sync Health Dashboard
+ */
+router.get('/health/:organizationId/history', authenticateJWT, getOrganizationSyncHistory);
 
 export default router;

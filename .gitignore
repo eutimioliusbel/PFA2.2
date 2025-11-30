@@ -76,3 +76,8 @@ backend/token.txt
 # Test/example data
 pems_apis_examples/
 ps/
+
+# Test artifacts
+playwright-report/
+test-results/
+*.local.json

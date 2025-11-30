@@ -1,0 +1,120 @@
+config:
+  target: "http://localhost:3001"
+  plugins:
+    expect: {}
+  phases:
+    # Warm-up phase
+    - duration: 20
+      arrivalRate: 10
+      name: "Warm-up"
+    # Load phase: 100 concurrent users
+    - duration: 90
+      arrivalRate: 30
+      name: "Sustained load - 100 concurrent users switching orgs"
+    # Spike phase: Sudden org switch storm
+    - duration: 20
+      arrivalRate: 80
+      name: "Org switch storm"
+    # Cool-down phase
+    - duration: 20
+      arrivalRate: 10
+      name: "Cool-down"
+  payload:
+    path: "./test-credentials.json"
+    fields:
+      - "username"
+      - "password"
+  processor: "./processors/org-switch-processor.js"
+  variables:
+    baseUrl: "http://localhost:3001"
+
+scenarios:
+  - name: "Organization Context Switch"
+    weight: 100
+    flow:
+      # Step 1: Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.organizations[0].organizationId"
+              as: "org1"
+            - json: "$.user.organizations[1].organizationId"
+              as: "org2"
+            - json: "$.user.organizations[2].organizationId"
+              as: "org3"
+          expect:
+            - statusCode: 200
+            - hasProperty: token
+
+      # Step 2: Access data in Organization 1
+      - get:
+          url: "/api/pfa?organizationId={{ org1 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      - get:
+          url: "/api/servers?organizationId={{ org1 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      # Step 3: Switch to Organization 2
+      - get:
+          url: "/api/pfa?organizationId={{ org2 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 404] # 404 if org2 is undefined
+
+      - get:
+          url: "/api/servers?organizationId={{ org2 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 404]
+
+      # Step 4: Switch back to Organization 1
+      - get:
+          url: "/api/pfa?organizationId={{ org1 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      # Step 5: Rapid context switching (race condition test)
+      - get:
+          url: "/api/organizations?organizationId={{ org1 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      - get:
+          url: "/api/organizations?organizationId={{ org2 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403, 404]
+
+      - get:
+          url: "/api/organizations?organizationId={{ org1 }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]
+
+      # Step 6: Check user organizations status
+      - get:
+          url: "/api/users/{{ username }}/organizations"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 403]

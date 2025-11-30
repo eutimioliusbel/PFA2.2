@@ -1,201 +1,155 @@
 # Architecture Decision Records (ADRs)
 
-**Last Updated:** 2025-11-25
-**Status:** Current
-
-> **Purpose**: Document significant architectural decisions with context, rationale, and consequences. ADRs are immutable once accepted - use new ADRs to supersede old ones.
+**Last Updated**: 2025-11-27
+**Total ADRs**: 3 (Active)
 
 ---
 
-## 📖 What are ADRs?
+## 📋 What are ADRs?
 
-Architecture Decision Records capture **why** we made certain architectural choices, not just **what** we built. Each ADR documents:
+Architecture Decision Records (ADRs) document significant architectural decisions made during the development of PFA Vanguard. Each ADR captures:
 
-1. **Context**: The problem or situation requiring a decision
-2. **Decision**: The architectural choice made
-3. **Rationale**: Why this choice over alternatives
-4. **Consequences**: Trade-offs, benefits, and future implications
-5. **Status**: Proposed, Accepted, Deprecated, Superseded
-
----
-
-## 📋 Active ADRs
-
-| ADR | Title | Status | Date | Impact |
-|-----|-------|--------|------|--------|
-| **[ADR-004](./ADR-004-database-architecture-hybrid.md)** | Database Architecture: Hybrid Approach | ✅ Accepted | 2025-11-25 | High |
-| **[ADR-005](./ADR-005-CACHED-MIRROR-DELTA-ARCHITECTURE.md)** | Cached Mirror-Delta Architecture | ✅ Accepted | 2025-11-25 | High |
+1. **What** was decided
+2. **Why** it was decided
+3. **How** to implement it
+4. **What** was actually implemented
 
 ---
 
-## 📄 ADR Details
+## 📂 ADR Folder Structure
 
-### ADR-004: Database Architecture - Hybrid Approach
+Each ADR has its own folder containing **7 required documents** (Blueprint Container):
 
-**Decision**: 3-tier hybrid architecture (PostgreSQL + Redis + React state)
+\`\`\`
+ADR-NNN-descriptive-title/
+├── README.md                          # Folder overview & status dashboard
+├── ADR-NNN-DECISION.md                # The "Why" - Business requirements
+├── ADR-NNN-AI_OPPORTUNITIES.md        # The "Future-Proofing" - AI readiness
+├── ADR-NNN-UX_SPEC.md                 # The "Feel" - Interaction model
+├── ADR-NNN-TEST_PLAN.md               # The "Guardrails" - Security & testing
+├── ADR-NNN-IMPLEMENTATION_PLAN.md     # The "How" - Technical blueprint
+├── ADR-NNN-AGENT_WORKFLOW.md          # The "Schedule" - Agent orchestration
+└── ADR-NNN-TECHNICAL_DOCS.md          # The "As-Built" - Post-implementation
+\`\`\`
 
-**Context**: System needs to handle 1M+ PFA records with sub-100ms query times and bi-directional sync with PEMS.
-
-**Rationale**:
-- PostgreSQL: Source of truth with ACID guarantees
-- Redis: Hot data cache (15-min TTL) for active organizations
-- React state: Active session data (~1000 records)
-
-**Consequences**:
-- ✅ Scales to 1M+ records
-- ✅ Sub-100ms query performance
-- ❌ Requires Redis infrastructure
-- ❌ Cache invalidation complexity
-
-**Related**: [../backend/MIGRATION-GUIDE-POSTGRESQL.md](../backend/MIGRATION-GUIDE-POSTGRESQL.md)
+**Philosophy**: "Blueprint Container" approach where Product, UX, AI, and Engineering concerns are isolated and defined before implementation begins. This ensures AI-readiness, security, and UX excellence are built in from day one.
 
 ---
 
-### ADR-005: Cached Mirror-Delta Architecture
+## 📖 All ADRs
 
-**Decision**: Track changes in database with `syncState` field for bi-directional sync
+### Active ADRs
 
-**Context**: Need to sync local modifications back to PEMS while avoiding overwriting user changes with PEMS updates.
+| ADR | Title | Status | Created | Impact |
+|-----|-------|--------|---------|--------|
+| [ADR-005](./ADR-005-multi-tenant-access-control/) | Multi-Tenant Access Control | Proposed | 2025-11-26 | High |
+| [ADR-006](./ADR-006-api-server-and-endpoint-architecture/) | API Server and Endpoint Architecture | 🏗️ In Design | 2025-11-26 | High |
+| [ADR-007](./ADR-007-api-connectivity-and-intelligence-layer/) | API Connectivity & Intelligence Layer | 🏗️ In Design | 2025-11-27 | Critical |
+| [ADR-008](./ADR-008-bidirectional-pems-sync/) | Bi-directional PEMS Synchronization | 📋 Planning | 2025-11-28 | High |
 
-**Rationale**:
-- Track record state: pristine, modified, pending_sync, sync_error
-- Store modified fields in JSON array for incremental sync
-- PEMS version tracking for conflict detection
+### Implemented ADRs
 
-**Consequences**:
-- ✅ Bi-directional sync without data loss
-- ✅ Conflict detection and resolution
-- ❌ Schema complexity (extra tracking fields)
-- ❌ Sync state machine complexity
-
-**Related**: [../implementation/IMPLEMENTATION-PLAN-MIRROR-DELTA.md](../implementation/IMPLEMENTATION-PLAN-MIRROR-DELTA.md)
+| ADR | Title | Status | Implemented | Impact |
+|-----|-------|--------|-------------|--------|
+| - | - | - | - | - |
 
 ---
 
-## 📋 Planned ADRs
+## 🚀 Complete ADR Lifecycle Management
 
-| ADR | Title | Status | Priority |
-|-----|-------|--------|----------|
-| **ADR-001** | Sandbox Pattern for State Management | 📋 Planned | High |
-| **ADR-002** | Multi-Organization Isolation Strategy | 📋 Planned | Medium |
-| **ADR-003** | PEMS Integration Architecture | 📋 Planned | Medium |
-| **ADR-006** | Frontend State Migration (Refs → Zustand) | 📋 Planned | High |
+### Three-Step Workflow
 
----
+#### Step 1: Create (Plan)
 
-## 🔧 ADR Process
+\`\`\`
+/plan-adr 006 "Feature Title" "Problem description"
+\`\`\`
 
-### When to Write an ADR
+This will automatically:
+- ✅ Create the ADR folder structure
+- ✅ Generate 6 blueprint documents with comprehensive templates
+- ✅ Update this README.md file
 
-Write an ADR when making decisions about:
+**What Gets Created**:
+1. **README.md** - Navigation and status tracking
+2. **DECISION.md** - Requirements with discovery questions
+3. **AI_OPPORTUNITIES.md** - Future AI integration points and data hooks
+4. **UX_SPEC.md** - Perceived performance and interaction design
+5. **TEST_PLAN.md** - Security red teaming and testing strategy
+6. **IMPLEMENTATION_PLAN.md** - Technical specifications
+7. **AGENT_WORKFLOW.md** - Placeholder (generated in Step 3)
 
-✅ **Architecture**: Database choice, caching strategy, state management
-✅ **Integration Patterns**: External API design, sync strategies
-✅ **Technology Choices**: Framework selection, library adoption
-✅ **Performance**: Optimization strategies with trade-offs
-✅ **Security**: Authentication, encryption, secrets management
+#### Step 2: Update (Change Management) [Optional]
 
-❌ **Don't write ADRs for**: Code style, minor refactoring, bug fixes, documentation changes
+If you forgot functionality or scope changed:
 
----
+\`\`\`
+/update-adr 006 "Change Title" "Description of new functionality"
+\`\`\`
 
-### ADR Template
+**When to Use**:
+- Forgot to include functionality in the original plan
+- Scope changed after planning phase
+- Need to add new features to an existing ADR
 
-```markdown
-# ADR-XXX: [Title]
+**What Happens**:
+- ✅ Orchestrator analyzes impact on all 5 blueprint documents
+- ✅ Generates `UPDATE_PLAN.md` with specific prompt bundles for each affected document
+- ✅ Each bundle targets a specialist agent (product-requirements-analyst, ux-technologist, backend-architecture-optimizer, etc.)
+- ✅ Prevents "hacking in" features - forces proper specification first
+- ⚠️ **CRITICAL**: After updates, must re-run `/execute-adr` to regenerate workflow
 
-**Status**: Proposed | Accepted | Deprecated | Superseded by [ADR-###]
-**Date**: YYYY-MM-DD
-**Deciders**: [List of people involved]
-**Impact**: Low | Medium | High
+**Philosophy**: Prevents scope creep. All changes must be properly specified before implementation.
 
-## Context
+#### Step 3: Execute (Build)
 
-[Describe the problem or situation requiring a decision]
+After completing the blueprint documents (and any updates):
 
-## Decision
+\`\`\`
+/execute-adr 006
+\`\`\`
 
-[State the architectural decision clearly and concisely]
+This will:
+- ✅ Read all 6 blueprint documents
+- ✅ Generate `AGENT_WORKFLOW.md` as an **executable meta-prompt**
+- ✅ Identify parallel execution tracks
+- ✅ Create self-contained prompt bundles for each agent
+- ✅ Enforce AI hooks, UX specs, and security gates
 
-## Rationale
-
-[Explain why this decision was made over alternatives]
-
-**Alternatives Considered**:
-1. **Option A**: [Description] - Rejected because [reason]
-2. **Option B**: [Description] - Rejected because [reason]
-3. **Option C**: [Selected] - Chosen because [reason]
-
-## Consequences
-
-**Positive**:
-- ✅ Benefit 1
-- ✅ Benefit 2
-
-**Negative**:
-- ❌ Trade-off 1
-- ❌ Trade-off 2
-
-**Neutral**:
-- Changes required: [List]
-- Migration path: [Steps]
-
-## Implementation
-
-[High-level implementation approach if applicable]
-
-## Related
-
-- [Link to implementation plan]
-- [Link to related ADRs]
-- [Link to relevant documentation]
+**The Result**: A living, executable document that:
+- 📋 Guides you through each implementation phase
+- 🤖 Provides copy-paste prompt bundles for each specialized agent
+- 📊 Tracks progress with status table and checklist
+- 🔄 Can be resumed by pasting it back into chat
+- 🚫 Enforces dependencies (prevents skipping phases)
+- ⚡ Enables parallel execution (run multiple agents simultaneously)
 
 ---
 
-**Questions?** See [ADR process documentation](../DOCUMENTATION_STANDARDS.md#architecture-decision-records)
+### Complete Lifecycle Example
+
+```bash
+# Step 1: Create the ADR
+/plan-adr 006 "Smart Grid Filtering" "Users need to filter 20K+ records"
+
+# [Fill out blueprint documents with specialist agents]
+
+# Step 2: Realize you forgot CSV export functionality
+/update-adr 006 "Add CSV Export" "Must handle 20k rows without crashing browser"
+
+# [Execute update prompts to modify blueprints]
+
+# Step 3: Generate executable workflow (includes CSV export now)
+/execute-adr 006
+
+# [Follow AGENT_WORKFLOW.md to build the feature]
 ```
 
----
-
-### ADR Lifecycle
-
-```
-Proposed → Discussion → Accepted → Implemented
-                ↓
-            Rejected (document why)
-
-Later:
-Accepted → Deprecated (new approach emerging)
-        → Superseded by ADR-XXX (explicit replacement)
-```
-
-**Rules**:
-1. **Immutable**: Once accepted, ADRs are not edited (except typos)
-2. **Superseded**: New ADRs supersede old ones, don't modify old ADRs
-3. **Traceable**: Always link related ADRs and implementation docs
-4. **Dated**: Include decision date for historical context
+See [DOCUMENTATION_STANDARDS.md](../DOCUMENTATION_STANDARDS.md) Section 3.5 for detailed structure.
 
 ---
 
-## 🔗 Related Documentation
+**Index Maintained By**: \`/plan-adr\` command
+**Last Index Update**: 2025-11-28
 
-- **[../ARCHITECTURE.md](../ARCHITECTURE.md)** - Current system architecture
-- **[../ARCHITECTURE_CHANGELOG.md](../ARCHITECTURE_CHANGELOG.md)** - History of changes
-- **[../implementation/](../implementation/)** - Implementation plans for ADR decisions
-- **[../DOCUMENTATION_STANDARDS.md](../DOCUMENTATION_STANDARDS.md)** - Documentation guidelines
-
----
-
-## 📝 Contributing
-
-When creating an ADR:
-
-1. **Copy Template**: Use template above or `template.md` in this folder
-2. **Number Sequentially**: Next number is ADR-006
-3. **Get Feedback**: Discuss in team before marking "Accepted"
-4. **Link Implementation**: Reference implementation plans and guides
-5. **Update This Index**: Add entry to "Active ADRs" table
-
----
-
-**Questions?** See [DOCUMENTATION_STANDARDS.md](../DOCUMENTATION_STANDARDS.md) or [docs/README.md](../README.md)
+*This file is automatically updated by the \`/plan-adr\` command*

@@ -11,11 +11,11 @@
  * - Uses organization-based filtering from database
  */
 
-import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { decrypt } from '../../utils/encryption';
-
-const prisma = new PrismaClient();
+import { DataCollectionService } from '../aiDataHooks/DataCollectionService';
 
 export interface SyncProgress {
   syncId: string;
@@ -31,6 +31,25 @@ export interface SyncProgress {
   currentBatch: number;
   totalBatches: number;
   error?: string;
+}
+
+export interface OrganizationSyncResult {
+  organizationId: string;
+  organizationCode: string;
+  skipped: boolean;
+  reason?: string;
+  syncProgress?: SyncProgress;
+}
+
+export interface AllOrganizationsSyncSummary {
+  totalOrganizations: number;
+  syncedOrganizations: number;
+  skippedOrganizations: number;
+  failedOrganizations: number;
+  results: OrganizationSyncResult[];
+  startedAt: Date;
+  completedAt: Date;
+  durationMs: number;
 }
 
 export class PemsSyncService {
@@ -56,12 +75,104 @@ export class PemsSyncService {
 
     try {
       // Get organization details
-      const organization = await prisma.organization.findUnique({
+      const organization = await prisma.organizations.findUnique({
         where: { id: organizationId }
       });
 
       if (!organization) {
         throw new Error(`Organization ${organizationId} not found`);
+      }
+
+      // Check organization status - skip suspended/inactive organizations
+      if (organization.serviceStatus !== 'active') {
+        const reason = `Organization status: ${organization.serviceStatus}`;
+        logger.warn(`Sync skipped for organization ${organization.code}`, {
+          organizationId,
+          serviceStatus: organization.serviceStatus,
+          reason
+        });
+
+        // Log skip to audit log
+        await prisma.audit_logs.create({
+          data: {
+            id: randomUUID(),
+            userId: 'system',
+            organizationId,
+            action: 'sync_skipped',
+            resource: 'pfa_sync',
+            method: 'POST',
+            success: false,
+            metadata: {
+              reason,
+              syncType,
+              syncId: finalSyncId,
+              timestamp: new Date().toISOString()
+            }
+          }
+        });
+
+        // Return a failed progress status
+        return {
+          syncId: finalSyncId,
+          status: 'failed',
+          organizationId,
+          totalRecords: 0,
+          processedRecords: 0,
+          insertedRecords: 0,
+          updatedRecords: 0,
+          errorRecords: 0,
+          startedAt: startTime,
+          completedAt: new Date(),
+          currentBatch: 0,
+          totalBatches: 0,
+          error: reason
+        };
+      }
+
+      // Check if sync is enabled for this organization
+      if (!organization.enableSync) {
+        const reason = 'Sync is disabled for this organization';
+        logger.warn(`Sync skipped for organization ${organization.code}`, {
+          organizationId,
+          enableSync: organization.enableSync,
+          reason
+        });
+
+        // Log skip to audit log
+        await prisma.audit_logs.create({
+          data: {
+            id: randomUUID(),
+            userId: 'system',
+            organizationId,
+            action: 'sync_skipped',
+            resource: 'pfa_sync',
+            method: 'POST',
+            success: false,
+            metadata: {
+              reason,
+              syncType,
+              syncId: finalSyncId,
+              timestamp: new Date().toISOString()
+            }
+          }
+        });
+
+        // Return a failed progress status
+        return {
+          syncId: finalSyncId,
+          status: 'failed',
+          organizationId,
+          totalRecords: 0,
+          processedRecords: 0,
+          insertedRecords: 0,
+          updatedRecords: 0,
+          errorRecords: 0,
+          startedAt: startTime,
+          completedAt: new Date(),
+          currentBatch: 0,
+          totalBatches: 0,
+          error: reason
+        };
       }
 
       // API Config ID is required
@@ -70,7 +181,7 @@ export class PemsSyncService {
       }
 
       // Get API configuration from database
-      const config = await prisma.apiConfiguration.findUnique({
+      const config = await prisma.api_configurations.findUnique({
         where: { id: apiConfigId }
       });
 
@@ -93,7 +204,7 @@ export class PemsSyncService {
       }
 
       // Check for organization-specific credentials first
-      const orgCredentials = await prisma.organizationApiCredentials.findUnique({
+      const orgCredentials = await prisma.organization_api_credentials.findUnique({
         where: {
           organizationId_apiConfigurationId: {
             organizationId: organizationId,
@@ -200,13 +311,12 @@ export class PemsSyncService {
         });
       }
 
-      // If full sync, clear existing data for this organization
+      // Full sync uses Bronze layer pruning after Silver promotion
+      // No need to manually clear data - handled by BronzePruningService
       if (syncType === 'full') {
-        logger.info(`Clearing existing PFA data for ${organization.code}`);
-        // TODO: Add PfaRecord model and delete existing records
-        // await prisma.pfaRecord.deleteMany({
-        //   where: { organization: organization.code }
-        // });
+        logger.info(`Full sync mode - Bronze layer will be pruned after promotion`, {
+          organizationCode: organization.code
+        });
       }
 
       // Fetch and process data in pages
@@ -334,7 +444,7 @@ export class PemsSyncService {
       }
 
       // Get API configuration from database
-      const config = await prisma.apiConfiguration.findUnique({
+      const config = await prisma.api_configurations.findUnique({
         where: { id: apiConfigId }
       });
 
@@ -460,7 +570,7 @@ export class PemsSyncService {
       throw new Error(`Failed to fetch organizations: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     // Log the full response for debugging
     logger.info('PEMS API Response:', {
@@ -497,13 +607,13 @@ export class PemsSyncService {
         const orgData = this.mapPemsOrganization(org);
 
         // Upsert organization to database
-        const existing = await prisma.organization.findUnique({
+        const existing = await prisma.organizations.findUnique({
           where: { code: orgData.code }
         });
 
         if (existing) {
           // Update existing organization (preserve some fields)
-          await prisma.organization.update({
+          const updatedOrg = await prisma.organizations.update({
             where: { code: orgData.code },
             data: {
               name: orgData.name,
@@ -514,19 +624,57 @@ export class PemsSyncService {
           });
           updated++;
           logger.debug(`Updated organization: ${orgData.code}`);
+
+          // AI Data Hook: Log external entity sync (non-blocking)
+          DataCollectionService.logExternalEntitySync({
+            userId: 'system',
+            organizationId: updatedOrg.id,
+            action: 'updated',
+            entityType: 'Organization',
+            entityId: updatedOrg.id,
+            externalId: orgData.code,
+            externalSystem: 'PEMS',
+            syncMetadata: {
+              recordsProcessed: 1,
+              recordsInserted: 0,
+              recordsUpdated: 1,
+              recordsSkipped: 0
+            }
+          }).catch((err: unknown) => logger.error('Failed to log organization sync for AI', { error: err }));
         } else {
           // Create new organization
-          await prisma.organization.create({
+          const newOrg = await prisma.organizations.create({
             data: {
+              id: `org_${orgData.code}_${Date.now()}`,
               code: orgData.code,
               name: orgData.name,
               description: orgData.description,
               logoUrl: `https://api.dicebear.com/7.x/shapes/svg?seed=${orgData.code}&backgroundColor=${this.getRandomColor()}`,
-              isActive: true
+              isActive: true,
+              isExternal: true,
+              externalId: orgData.code,
+              updatedAt: new Date()
             }
           });
           inserted++;
           logger.debug(`Inserted organization: ${orgData.code}`);
+
+          // AI Data Hook: Log external entity sync (non-blocking)
+          DataCollectionService.logExternalEntitySync({
+            userId: 'system',
+            organizationId: newOrg.id,
+            action: 'created',
+            entityType: 'Organization',
+            entityId: newOrg.id,
+            externalId: orgData.code,
+            externalSystem: 'PEMS',
+            syncMetadata: {
+              recordsProcessed: 1,
+              recordsInserted: 1,
+              recordsUpdated: 0,
+              recordsSkipped: 0
+            }
+          }).catch((err: unknown) => logger.error('Failed to log organization sync for AI', { error: err }));
         }
 
       } catch (error) {
@@ -605,10 +753,10 @@ export class PemsSyncService {
     };
 
     if (gridCode) {
-      requestBody.GRID['GRID_NAME'] = gridCode;
+      (requestBody.GRID as any)['GRID_NAME'] = gridCode;
     }
     if (gridId) {
-      requestBody.GRID['GRID_ID'] = gridId;
+      (requestBody.GRID as any)['GRID_ID'] = gridId;
     }
 
     // Log the actual request for debugging
@@ -628,7 +776,7 @@ export class PemsSyncService {
       throw new Error(`Failed to fetch total count: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     // Log the full response for debugging
     logger.info('PEMS Grid Data API Count Response:', {
@@ -716,10 +864,10 @@ export class PemsSyncService {
     };
 
     if (gridCode) {
-      requestBody.GRID['GRID_NAME'] = gridCode;
+      (requestBody.GRID as any)['GRID_NAME'] = gridCode;
     }
     if (gridId) {
-      requestBody.GRID['GRID_ID'] = gridId;
+      (requestBody.GRID as any)['GRID_ID'] = gridId;
     }
 
     const response = await fetch(url, {
@@ -732,7 +880,7 @@ export class PemsSyncService {
       throw new Error(`Failed to fetch PFA data: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     // Log the full response for debugging
     logger.info('PEMS Grid Data API Response:', {
@@ -765,23 +913,134 @@ export class PemsSyncService {
 
     for (const record of records) {
       try {
-        const pfaData = this.mapPemsRecordToPfa(record, organizationId, organizationCode);
+        const mirrorData = this.mapPemsRecordToMirrorData(record, organizationId, organizationCode);
 
-        // TODO: Implement upsert logic when PfaRecord model is ready
-        // For now, just log the mapped data
-        logger.debug('Mapped PFA record:', {
-          pfaId: pfaData.pfaId,
-          organization: pfaData.organization
+        // Write to PfaMirror table with versioning (archive old version before update)
+        const result = await prisma.$transaction(async (tx) => {
+          // Check if record exists
+          const existingMirror = await tx.pfa_mirror.findUnique({
+            where: {
+              organizationId_pfaId: {
+                organizationId: organizationId,
+                pfaId: mirrorData.pfaId
+              }
+            }
+          });
+
+          if (existingMirror) {
+            // Archive current version to history before updating
+            await tx.pfa_mirror_history.create({
+              data: {
+                id: `pfah_${existingMirror.id}_v${existingMirror.version}`,
+                mirrorId: existingMirror.id,
+                version: existingMirror.version,
+                organizationId: existingMirror.organizationId,
+                data: existingMirror.data as any,
+                pfaId: existingMirror.pfaId,
+                category: existingMirror.category,
+                class: existingMirror.class,
+                source: existingMirror.source,
+                dor: existingMirror.dor,
+                areaSilo: existingMirror.areaSilo,
+                manufacturer: existingMirror.manufacturer,
+                model: existingMirror.model,
+                monthlyRate: existingMirror.monthlyRate,
+                purchasePrice: existingMirror.purchasePrice,
+                forecastStart: existingMirror.forecastStart,
+                forecastEnd: existingMirror.forecastEnd,
+                originalStart: existingMirror.originalStart,
+                originalEnd: existingMirror.originalEnd,
+                actualStart: existingMirror.actualStart,
+                actualEnd: existingMirror.actualEnd,
+                isActualized: existingMirror.isActualized,
+                isDiscontinued: existingMirror.isDiscontinued,
+                isFundsTransferable: existingMirror.isFundsTransferable,
+                hasPlan: existingMirror.hasPlan,
+                hasActuals: existingMirror.hasActuals,
+                pemsVersion: existingMirror.pemsVersion,
+                syncBatchId: existingMirror.syncBatchId,
+                changedBy: 'PEMS_SYNC',
+                changeReason: 'PEMS data sync update'
+              }
+            });
+
+            // Update mirror with incremented version
+            return tx.pfa_mirror.update({
+              where: { id: existingMirror.id },
+              data: {
+                data: mirrorData as any,
+                category: mirrorData.category,
+                class: mirrorData.class,
+                source: mirrorData.source,
+                dor: mirrorData.dor,
+                areaSilo: mirrorData.areaSilo,
+                manufacturer: mirrorData.manufacturer,
+                model: mirrorData.model,
+                monthlyRate: mirrorData.monthlyRate,
+                purchasePrice: mirrorData.purchasePrice,
+                forecastStart: mirrorData.forecastStart ? new Date(mirrorData.forecastStart) : null,
+                forecastEnd: mirrorData.forecastEnd ? new Date(mirrorData.forecastEnd) : null,
+                originalStart: mirrorData.originalStart ? new Date(mirrorData.originalStart) : null,
+                originalEnd: mirrorData.originalEnd ? new Date(mirrorData.originalEnd) : null,
+                actualStart: mirrorData.actualStart ? new Date(mirrorData.actualStart) : null,
+                actualEnd: mirrorData.actualEnd ? new Date(mirrorData.actualEnd) : null,
+                isActualized: mirrorData.isActualized,
+                isDiscontinued: mirrorData.isDiscontinued,
+                isFundsTransferable: mirrorData.isFundsTransferable,
+                hasPlan: mirrorData.hasPlan,
+                hasActuals: mirrorData.hasActuals,
+                pemsVersion: mirrorData.pemsVersion,
+                version: existingMirror.version + 1,
+                lastSyncedAt: new Date()
+              }
+            });
+          } else {
+            // Create new mirror record
+            return tx.pfa_mirror.create({
+              data: {
+                id: `pfam_${organizationId}_${mirrorData.pfaId}`,
+                organizationId: organizationId,
+                pfaId: mirrorData.pfaId,
+                data: mirrorData as any,
+                category: mirrorData.category,
+                class: mirrorData.class,
+                source: mirrorData.source,
+                dor: mirrorData.dor,
+                areaSilo: mirrorData.areaSilo,
+                manufacturer: mirrorData.manufacturer,
+                model: mirrorData.model,
+                monthlyRate: mirrorData.monthlyRate,
+                purchasePrice: mirrorData.purchasePrice,
+                forecastStart: mirrorData.forecastStart ? new Date(mirrorData.forecastStart) : null,
+                forecastEnd: mirrorData.forecastEnd ? new Date(mirrorData.forecastEnd) : null,
+                originalStart: mirrorData.originalStart ? new Date(mirrorData.originalStart) : null,
+                originalEnd: mirrorData.originalEnd ? new Date(mirrorData.originalEnd) : null,
+                actualStart: mirrorData.actualStart ? new Date(mirrorData.actualStart) : null,
+                actualEnd: mirrorData.actualEnd ? new Date(mirrorData.actualEnd) : null,
+                isActualized: mirrorData.isActualized,
+                isDiscontinued: mirrorData.isDiscontinued,
+                isFundsTransferable: mirrorData.isFundsTransferable,
+                hasPlan: mirrorData.hasPlan,
+                hasActuals: mirrorData.hasActuals,
+                version: 1,
+                lastSyncedAt: new Date(),
+                updatedAt: new Date()
+              }
+            });
+          }
         });
 
-        // When ready, use:
-        // const result = await prisma.pfaRecord.upsert({
-        //   where: { pfaId: pfaData.pfaId },
-        //   update: pfaData,
-        //   create: pfaData
-        // });
+        // Track insert vs update
+        if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+          inserted++;
+        } else {
+          updated++;
+        }
 
-        inserted++; // Placeholder - will be updated when database operations are active
+        logger.debug('Synced PFA to mirror:', {
+          pfaId: mirrorData.pfaId,
+          organization: organizationCode
+        });
 
       } catch (error) {
         logger.error('Failed to process PFA record:', error);
@@ -798,56 +1057,65 @@ export class PemsSyncService {
   }
 
   /**
-   * Map PEMS grid row to PFA record structure
+   * Map PEMS grid row to PfaMirrorData structure
+   * This creates the immutable baseline that gets stored in pfa_mirror.data (JSONB)
    */
-  private mapPemsRecordToPfa(pemsRow: any, organizationId: string, organizationCode: string): any {
+  private mapPemsRecordToMirrorData(pemsRow: any, _organizationId: string, organizationCode: string): any {
     // PEMS returns data as ROW.CELL array where each CELL has ALIAS_NAME and VALUE
     const getValue = (aliasName: string): string => {
       const cell = pemsRow.CELL?.find((c: any) => c.ALIAS_NAME === aliasName);
       return cell?.VALUE || '';
     };
 
-    // Map PEMS fields to our PFA structure
+    // Map PEMS fields to PfaMirrorData structure
     return {
-      organizationId,
-      organization: organizationCode,
+      // Identity
       pfaId: getValue('pfs_id'),
-      description: getValue('description'),
-
-      // Plan fields (original)
-      originalStart: this.parseDate(getValue('pfs_p_startdate')),
-      originalEnd: this.parseDate(getValue('pfs_p_enddate')),
-
-      // Forecast fields
-      forecastStart: this.parseDate(getValue('pfs_f_startdate')),
-      forecastEnd: this.parseDate(getValue('pfs_f_enddate')),
-
-      // Actual fields
-      actualStart: this.parseDate(getValue('pfs_a_startdate')),
-      actualEnd: this.parseDate(getValue('pfs_a_enddate')),
+      organization: organizationCode,
 
       // Classification
-      class: getValue('pfs_f_class'),
-      category: getValue('pfs_f_category'),
-      categoryDescription: getValue('pfs_f_catdesc'),
+      areaSilo: getValue('pfs_f_area') || '',
+      category: getValue('pfs_f_category') || '',
+      forecastCategory: getValue('pfs_f_catdesc') || undefined,
+      class: getValue('pfs_f_class') || '',
 
-      // Financial
-      source: getValue('pfs_f_source'), // Rental or Purchase
-      dor: getValue('pfs_f_dor'), // BEO or PROJECT
-      monthlyRate: parseFloat(getValue('pfs_f_rental')) || 0,
-      purchasePrice: parseFloat(getValue('pfs_f_purchase')) || 0,
+      // Source & Financial Type
+      source: getValue('pfs_f_source') || 'Rental', // Rental or Purchase
+      dor: getValue('pfs_f_dor') || 'PROJECT', // BEO or PROJECT
 
-      // Status flags
+      // Status Flags (from PEMS)
       isActualized: getValue('pfs_f_actualized') === 'Y',
       isDiscontinued: getValue('pfs_f_discontinued') === 'Y',
       isFundsTransferable: getValue('pfs_f_fundstrans') === 'Y',
 
-      // Metadata
-      area: getValue('pfs_f_area'),
-      projectCode: getValue('pfs_p_projcode'),
+      // Financial Data (from PEMS)
+      monthlyRate: parseFloat(getValue('pfs_f_rental')) || 0,
+      purchasePrice: parseFloat(getValue('pfs_f_purchase')) || 0,
 
-      createdAt: new Date(),
-      updatedAt: new Date()
+      // Equipment Details
+      manufacturer: getValue('pfs_f_manufacturer') || '',
+      model: getValue('pfs_f_model') || '',
+      contract: getValue('pfs_p_projcode') || undefined,
+      equipment: getValue('pfs_equipment_tag') || undefined,
+
+      // Timeline - PLAN (Baseline - Locked)
+      originalStart: this.parseDate(getValue('pfs_p_startdate')),
+      originalEnd: this.parseDate(getValue('pfs_p_enddate')),
+      hasPlan: !!(getValue('pfs_p_startdate') && getValue('pfs_p_enddate')),
+
+      // Timeline - FORECAST (Editable)
+      forecastStart: this.parseDate(getValue('pfs_f_startdate')),
+      forecastEnd: this.parseDate(getValue('pfs_f_enddate')),
+
+      // Timeline - ACTUALS (Historical)
+      actualStart: this.parseDate(getValue('pfs_a_startdate')),
+      actualEnd: this.parseDate(getValue('pfs_a_enddate')),
+      hasActuals: !!(getValue('pfs_a_startdate') && getValue('pfs_a_enddate')),
+
+      // PEMS Metadata
+      pemsVersion: getValue('pfs_lastmodified') || undefined,
+      lastSyncedAt: new Date().toISOString(),
+      syncBatchId: undefined // Set by caller if needed
     };
   }
 
@@ -860,6 +1128,156 @@ export class PemsSyncService {
       return new Date(dateStr);
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Sync all organizations that are eligible for sync
+   * (external organizations with sync enabled and active status)
+   *
+   * Phase 3, Task 3.1: Organization-Based Sync Filtering
+   */
+  async syncAllOrganizations(apiConfigId: string): Promise<AllOrganizationsSyncSummary> {
+    const startTime = new Date();
+    const results: OrganizationSyncResult[] = [];
+
+    logger.info('Starting sync for all eligible organizations', { apiConfigId });
+
+    try {
+      // Find all organizations that should be synced
+      const organizations = await prisma.organizations.findMany({
+        where: {
+          isExternal: true,
+          enableSync: true
+        },
+        orderBy: {
+          code: 'asc'
+        }
+      });
+
+      logger.info(`Found ${organizations.length} organizations with sync enabled`);
+
+      for (const org of organizations) {
+        logger.info(`Processing organization: ${org.code}`, {
+          organizationId: org.id,
+          serviceStatus: org.serviceStatus
+        });
+
+        // Check if organization is active
+        if (org.serviceStatus !== 'active') {
+          const reason = `Organization status: ${org.serviceStatus}`;
+
+          logger.warn(`Skipping organization ${org.code} - ${reason}`);
+
+          // Log skip to audit log
+          await prisma.audit_logs.create({
+            data: {
+              id: randomUUID(),
+              userId: 'system',
+              organizationId: org.id,
+              action: 'sync_skipped',
+              resource: 'all_organizations_sync',
+              method: 'POST',
+              success: false,
+              metadata: {
+                reason,
+                serviceStatus: org.serviceStatus,
+                timestamp: new Date().toISOString()
+              }
+            }
+          });
+
+          results.push({
+            organizationId: org.id,
+            organizationCode: org.code,
+            skipped: true,
+            reason
+          });
+
+          continue;
+        }
+
+        // Attempt to sync this organization
+        try {
+          const syncProgress = await this.syncPfaData(
+            org.id,
+            'full',
+            undefined,
+            apiConfigId
+          );
+
+          results.push({
+            organizationId: org.id,
+            organizationCode: org.code,
+            skipped: false,
+            syncProgress
+          });
+
+          logger.info(`Successfully synced organization ${org.code}`, {
+            totalRecords: syncProgress.totalRecords,
+            processedRecords: syncProgress.processedRecords
+          });
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          logger.error(`Failed to sync organization ${org.code}`, {
+            error: errorMessage
+          });
+
+          // Log failure to audit log
+          await prisma.audit_logs.create({
+            data: {
+              id: randomUUID(),
+              userId: 'system',
+              organizationId: org.id,
+              action: 'sync_failed',
+              resource: 'all_organizations_sync',
+              method: 'POST',
+              success: false,
+              metadata: {
+                error: errorMessage,
+                timestamp: new Date().toISOString()
+              }
+            }
+          });
+
+          results.push({
+            organizationId: org.id,
+            organizationCode: org.code,
+            skipped: false,
+            reason: `Sync failed: ${errorMessage}`
+          });
+        }
+      }
+
+      const endTime = new Date();
+      const durationMs = endTime.getTime() - startTime.getTime();
+
+      const summary: AllOrganizationsSyncSummary = {
+        totalOrganizations: organizations.length,
+        syncedOrganizations: results.filter(r => !r.skipped && r.syncProgress?.status === 'completed').length,
+        skippedOrganizations: results.filter(r => r.skipped).length,
+        failedOrganizations: results.filter(r => !r.skipped && (!r.syncProgress || r.syncProgress.status === 'failed')).length,
+        results,
+        startedAt: startTime,
+        completedAt: endTime,
+        durationMs
+      };
+
+      logger.info('Completed sync for all organizations', {
+        totalOrganizations: summary.totalOrganizations,
+        syncedOrganizations: summary.syncedOrganizations,
+        skippedOrganizations: summary.skippedOrganizations,
+        failedOrganizations: summary.failedOrganizations,
+        durationMs
+      });
+
+      return summary;
+
+    } catch (error) {
+      logger.error('Failed to sync all organizations', { error });
+      throw error;
     }
   }
 }

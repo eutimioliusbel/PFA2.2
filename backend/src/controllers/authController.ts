@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import authService from '../services/auth/authService';
-import { logger } from '../utils/logger';
+import { logger as _logger } from '../utils/logger';
+import { handleControllerError } from '../utils/errorHandling';
 
 export class AuthController {
   /**
@@ -19,14 +20,8 @@ export class AuthController {
       const result = await authService.login(username, password);
 
       res.json(result);
-    } catch (error: any) {
-      logger.error('Login controller error:', error);
-
-      if (error.message === 'Invalid credentials' || error.message === 'Account is inactive') {
-        res.status(401).json({ error: 'AUTHENTICATION_FAILED', message: error.message });
-      } else {
-        res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Login failed' });
-      }
+    } catch (error: unknown) {
+      handleControllerError(error, res, 'AuthController.login');
     }
   }
 
@@ -61,14 +56,8 @@ export class AuthController {
           role: user.role,
         },
       });
-    } catch (error: any) {
-      logger.error('Register controller error:', error);
-
-      if (error.code === 'P2002') { // Prisma unique constraint violation
-        res.status(409).json({ error: 'USER_EXISTS', message: 'Username already exists' });
-      } else {
-        res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Registration failed' });
-      }
+    } catch (error: unknown) {
+      handleControllerError(error, res, 'AuthController.register');
     }
   }
 
